@@ -25,14 +25,28 @@ A Flutter mobile application for tracking roof claim progress through the entire
 ```
 lib/
 ├── main.dart                    # App entry point
+├── config/
+│   └── supabase_config.dart     # Supabase configuration
 ├── models/
-│   └── claim.dart              # Claim data model and status definitions
+│   ├── claim.dart              # Claim data model (SQLite)
+│   └── supabase_models.dart    # Supabase models (Project, Profile, etc.)
 ├── database/
 │   └── database_helper.dart    # SQLite database operations
+├── repository/
+│   ├── claim_repository.dart   # SQLite repository
+│   ├── supabase_project_repository.dart
+│   ├── supabase_profile_repository.dart
+│   ├── supabase_milestone_repository.dart
+│   ├── supabase_photo_repository.dart
+│   └── supabase_status_history_repository.dart
+├── viewmodels/
+│   ├── claims_list_viewmodel.dart
+│   ├── add_edit_claim_viewmodel.dart
+│   └── claim_detail_viewmodel.dart
 └── screens/
-    ├── claims_list_screen.dart      # Main screen with claims list
-    ├── add_edit_claim_screen.dart   # Add/Edit claim form
-    └── claim_detail_screen.dart     # Claim details with progress timeline
+    ├── claims_list_screen.dart
+    ├── add_edit_claim_screen.dart
+    └── claim_detail_screen.dart
 ```
 
 ## Getting Started
@@ -42,6 +56,7 @@ lib/
 - Flutter SDK (3.10.4 or higher)
 - Dart SDK
 - Android Studio / Xcode (for mobile development)
+- Supabase account (optional - for cloud sync)
 
 ### Installation
 
@@ -50,7 +65,17 @@ lib/
    flutter pub get
    ```
 
-2. Run the app:
+2. **Supabase Setup (Optional)**:
+   - Create a `.env` file in the project root
+   - Add your Supabase credentials:
+     ```
+     SUPABASE_URL=your_supabase_project_url
+     SUPABASE_ANON_KEY=your_supabase_anon_key
+     ```
+   - The app will work with SQLite only if Supabase is not configured
+   - See Supabase section below for schema setup
+
+3. Run the app:
    ```bash
    flutter run
    ```
@@ -60,6 +85,10 @@ lib/
 - `sqflite`: ^2.3.0 - SQLite database for Flutter
 - `path`: ^1.8.3 - Path manipulation utilities
 - `intl`: ^0.19.0 - Internationalization and date formatting
+- `provider`: ^6.1.1 - State management
+- `supabase_flutter`: ^2.5.6 - Supabase client (optional)
+- `uuid`: ^4.3.3 - UUID generation
+- `flutter_dotenv`: ^5.1.0 - Environment variable management
 
 ## Usage
 
@@ -91,11 +120,49 @@ This app closely follows the business flow:
 - Provides clear visual progress indicators
 - Supports notes for additional documentation
 
+## Supabase Integration
+
+The app includes Supabase integration for cloud storage and multi-user support. The Supabase schema includes:
+
+### Tables
+
+1. **profiles** - User profiles with roles (homeowner, roofingCompany, assessDirect, admin)
+2. **projects** - Main project/claim records
+3. **milestones** - Project milestones with status tracking
+4. **progress_photos** - Photo attachments for milestones
+5. **status_history** - Audit trail of status changes
+
+### Setup
+
+1. Create a Supabase project at https://supabase.com
+2. Run the SQL schema in your Supabase SQL editor
+3. Create a `.env` file with your credentials:
+   ```
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_ANON_KEY=your-anon-key
+   ```
+4. The app will automatically initialize Supabase on startup
+
+### Architecture
+
+The app uses **MVVM (Model-View-ViewModel)** architecture:
+- **Models**: Data structures
+- **ViewModels**: Business logic and state management
+- **Views**: UI screens
+- **Repository**: Data access layer (abstracts SQLite/Supabase)
+
+### Dual Storage Support
+
+- **SQLite**: Local storage for offline-first functionality
+- **Supabase**: Cloud storage for multi-device sync and collaboration
+- Both can work together or independently
+
 ## Future Enhancements (Optional)
 
-- Photo/document attachments
+- Photo/document attachments (Supabase storage integration)
+- Real-time sync between devices
+- Multi-user collaboration
 - Export functionality
 - Search and filter capabilities
 - Statistics dashboard
-- Cloud sync
-- Notifications for status changes
+- Push notifications for status changes

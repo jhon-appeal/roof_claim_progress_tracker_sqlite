@@ -1,9 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:roof_claim_progress_tracker_sqlite/config/supabase_config.dart';
 import 'package:roof_claim_progress_tracker_sqlite/screens/claims_list_screen.dart';
 import 'package:roof_claim_progress_tracker_sqlite/viewmodels/claims_list_viewmodel.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase (optional - will fail gracefully if .env is not configured)
+  try {
+    await SupabaseConfig.initialize();
+  } catch (e) {
+    // Supabase initialization failed - app can still work with SQLite only
+    debugPrint('Supabase initialization failed: $e');
+    debugPrint('App will continue with SQLite only mode');
+  }
+
   runApp(const MyApp());
 }
 
