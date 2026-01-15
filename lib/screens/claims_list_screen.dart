@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:roof_claim_progress_tracker_sqlite/models/claim.dart';
 import 'package:roof_claim_progress_tracker_sqlite/screens/add_edit_claim_screen.dart';
 import 'package:roof_claim_progress_tracker_sqlite/screens/claim_detail_screen.dart';
+import 'package:roof_claim_progress_tracker_sqlite/viewmodels/auth_viewmodel.dart';
 import 'package:roof_claim_progress_tracker_sqlite/viewmodels/claims_list_viewmodel.dart';
 
 class ClaimsListScreen extends StatefulWidget {
@@ -70,6 +72,57 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> {
         title: const Text('Roof Claim Tracker'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         elevation: 2,
+        actions: [
+          Consumer<ClaimsListViewModel>(
+            builder: (context, viewModel, child) {
+              return Row(
+                children: [
+                  // Sync status indicator
+                  if (viewModel.isSyncing)
+                    const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    )
+                  else
+                    Icon(
+                      viewModel.isOnline ? Icons.cloud_done : Icons.cloud_off,
+                      color: viewModel.isOnline ? Colors.green : Colors.grey,
+                    ),
+                  const SizedBox(width: 8),
+                  // Manual sync button
+                  IconButton(
+                    icon: const Icon(Icons.sync),
+                    tooltip: 'Sync',
+                    onPressed: viewModel.isOnline && !viewModel.isSyncing
+                        ? () => viewModel.syncNow()
+                        : null,
+                  ),
+                ],
+              );
+            },
+          ),
+          // Logout button
+          Consumer<AuthViewModel>(
+            builder: (context, authViewModel, child) {
+              return IconButton(
+                icon: const Icon(Icons.logout),
+                tooltip: 'Logout',
+                onPressed: () async {
+                  await authViewModel.signOut();
+                  if (context.mounted) {
+                    context.go('/login');
+                  }
+                },
+              );
+            },
+          ),
+        ],
       ),
       body: Consumer<ClaimsListViewModel>(
         builder: (context, viewModel, child) {

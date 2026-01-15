@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:roof_claim_progress_tracker_sqlite/config/supabase_config.dart';
-import 'package:roof_claim_progress_tracker_sqlite/screens/claims_list_screen.dart';
-import 'package:roof_claim_progress_tracker_sqlite/viewmodels/claims_list_viewmodel.dart';
+import 'package:roof_claim_progress_tracker_sqlite/core/router/app_router.dart';
+import 'package:roof_claim_progress_tracker_sqlite/viewmodels/auth_viewmodel.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,11 +26,10 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Provide the ClaimsListViewModel at the app level
-        // This ensures it persists across navigation
-        ChangeNotifierProvider(create: (_) => ClaimsListViewModel()),
+        // Provide AuthViewModel at the app level
+        ChangeNotifierProvider(create: (_) => AuthViewModel()),
       ],
-      child: MaterialApp(
+      child: MaterialApp.router(
         title: 'Roof Claim Progress Tracker',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
@@ -46,7 +45,7 @@ class MyApp extends StatelessWidget {
             ),
           ),
         ),
-        home: const ClaimsListScreen(),
+        routerConfig: AppRouter.router,
       ),
     );
   }
