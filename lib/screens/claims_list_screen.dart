@@ -84,9 +84,7 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> {
                       child: SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
                   else
