@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:roof_claim_progress_tracker_sqlite/core/utils/constants.dart';
+import 'package:roof_claim_progress_tracker_sqlite/database/database_helper.dart';
 import 'package:roof_claim_progress_tracker_sqlite/models/supabase_models.dart';
 import 'package:roof_claim_progress_tracker_sqlite/repository/supabase_milestone_repository.dart';
 import 'package:roof_claim_progress_tracker_sqlite/repository/supabase_photo_repository.dart';
@@ -12,6 +13,7 @@ class MilestoneDetailViewModel extends ChangeNotifier {
   final SupabaseMilestoneRepository _milestoneRepository = SupabaseMilestoneRepository();
   final SupabasePhotoRepository _photoRepository = SupabasePhotoRepository();
   final AuthService _authService = AuthService();
+  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   final Connectivity _connectivity = Connectivity();
 
   bool _isLoading = false;
@@ -40,18 +42,53 @@ class MilestoneDetailViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final supabaseMilestone = await _milestoneRepository.getMilestone(milestoneId);
-      if (supabaseMilestone != null) {
-        _milestone = MilestoneModel.fromJson(supabaseMilestone.toMap());
-        await loadPhotos(milestoneId);
+      // Check connectivity
+      final connectivityResult = await _connectivity.checkConnectivity();
+      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.wifi) ||
+          connectivityResult.contains(ConnectivityResult.ethernet);
+
+      if (isOnline) {
+        try {
+          // Try to load from Supabase first
+          final supabaseMilestone = await _milestoneRepository.getMilestone(milestoneId);
+          if (supabaseMilestone != null) {
+            _milestone = MilestoneModel.fromJson(supabaseMilestone.toMap());
+            // Save to SQLite for offline access
+            final existing = await _dbHelper.getMilestone(milestoneId);
+            if (existing == null) {
+              await _dbHelper.insertMilestone(_milestone!, needsSync: false);
+              await _dbHelper.markMilestoneAsSynced(_milestone!.id, _milestone!.id);
+            } else {
+              await _dbHelper.updateMilestone(_milestone!);
+            }
+            await loadPhotos(milestoneId);
+          }
+        } catch (e) {
+          // If Supabase fails, fall back to SQLite
+          _milestone = await _dbHelper.getMilestone(milestoneId);
+          // Photos require internet, so we won't load them offline
+        }
+      } else {
+        // Offline: load from SQLite
+        _milestone = await _dbHelper.getMilestone(milestoneId);
+        // Photos require internet, so we won't load them offline
       }
+
       await _loadCurrentUserRole();
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Failed to load milestone: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
+      // If everything fails, try SQLite as last resort
+      try {
+        _milestone = await _dbHelper.getMilestone(milestoneId);
+        _isLoading = false;
+        notifyListeners();
+      } catch (dbError) {
+        _errorMessage = 'Failed to load milestone: ${e.toString()}';
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -176,31 +213,66 @@ class MilestoneDetailViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      MilestoneStatus? milestoneStatus;
-      switch (newStatusLower) {
-        case 'pending':
-          milestoneStatus = MilestoneStatus.pending;
-          break;
-        case 'in_progress':
-          milestoneStatus = MilestoneStatus.inProgress;
-          break;
-        case 'completed':
-          milestoneStatus = MilestoneStatus.completed;
-          break;
-        case 'approved':
-          milestoneStatus = MilestoneStatus.approved;
-          break;
-      }
+      // Always update local SQLite first
+      final updatedMilestone = MilestoneModel(
+        id: _milestone!.id,
+        projectId: _milestone!.projectId,
+        name: _milestone!.name,
+        description: _milestone!.description,
+        status: newStatus,
+        dueDate: _milestone!.dueDate,
+        completedAt: newStatus == 'completed' ? DateTime.now() : _milestone!.completedAt,
+        createdAt: _milestone!.createdAt,
+        updatedAt: DateTime.now(),
+      );
 
-      if (milestoneStatus != null) {
-        await _milestoneRepository.updateMilestoneStatus(
-          _milestone!.id,
-          milestoneStatus,
-        );
-        await loadMilestone(_milestone!.id);
-        return true;
+      // Save to SQLite with needsSync = true
+      await _dbHelper.updateMilestone(updatedMilestone);
+      _milestone = updatedMilestone;
+
+      // Check if online to sync to Supabase
+      final connectivityResult = await _connectivity.checkConnectivity();
+      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.wifi) ||
+          connectivityResult.contains(ConnectivityResult.ethernet);
+
+      if (isOnline) {
+        try {
+          MilestoneStatus? milestoneStatus;
+          switch (newStatusLower) {
+            case 'pending':
+              milestoneStatus = MilestoneStatus.pending;
+              break;
+            case 'in_progress':
+              milestoneStatus = MilestoneStatus.inProgress;
+              break;
+            case 'completed':
+              milestoneStatus = MilestoneStatus.completed;
+              break;
+            case 'approved':
+              milestoneStatus = MilestoneStatus.approved;
+              break;
+          }
+
+          if (milestoneStatus != null) {
+            await _milestoneRepository.updateMilestoneStatus(
+              _milestone!.id,
+              milestoneStatus,
+            );
+            // Mark as synced after successful update
+            await _dbHelper.markMilestoneAsSynced(_milestone!.id, _milestone!.id);
+          }
+        } catch (e) {
+          // If Supabase update fails, the milestone is still saved locally with needsSync = true
+          // It will sync later when connection is restored
+          // Don't fail the operation since local update succeeded
+        }
       }
-      return false;
+      // If offline, milestone is saved locally and will sync when connection is restored
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
     } catch (e) {
       _errorMessage = 'Failed to update status: ${e.toString()}';
       _isLoading = false;

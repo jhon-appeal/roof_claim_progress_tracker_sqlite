@@ -40,29 +40,106 @@ class ProjectDetailViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final supabaseProject = await _projectRepository.getProject(projectId);
-      if (supabaseProject != null) {
-        _project = ProjectModel.fromJson(supabaseProject.toMap());
-        await loadMilestones(projectId);
+      // Check connectivity
+      final connectivityResult = await _connectivity.checkConnectivity();
+      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.wifi) ||
+          connectivityResult.contains(ConnectivityResult.ethernet);
+
+      if (isOnline) {
+        try {
+          // Try to load from Supabase first
+          final supabaseProject = await _projectRepository.getProject(projectId);
+          if (supabaseProject != null) {
+            _project = ProjectModel.fromJson(supabaseProject.toMap());
+            // Save to SQLite for offline access
+            final existing = await _dbHelper.getProject(projectId);
+            if (existing == null) {
+              await _dbHelper.insertProject(_project!, needsSync: false);
+              await _dbHelper.markProjectAsSynced(_project!.id, _project!.id);
+            } else {
+              await _dbHelper.updateProject(_project!);
+            }
+            await loadMilestones(projectId);
+          }
+        } catch (e) {
+          // If Supabase fails, fall back to SQLite
+          _project = await _dbHelper.getProject(projectId);
+          if (_project != null) {
+            await loadMilestones(projectId);
+          }
+        }
+      } else {
+        // Offline: load from SQLite
+        _project = await _dbHelper.getProject(projectId);
+        if (_project != null) {
+          await loadMilestones(projectId);
+        }
       }
+
       await _loadCurrentUserRole();
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Failed to load project: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
+      // If everything fails, try SQLite as last resort
+      try {
+        _project = await _dbHelper.getProject(projectId);
+        if (_project != null) {
+          await loadMilestones(projectId);
+        }
+        _isLoading = false;
+        notifyListeners();
+      } catch (dbError) {
+        _errorMessage = 'Failed to load project: ${e.toString()}';
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   Future<void> loadMilestones(String projectId) async {
     try {
-      final supabaseMilestones = await _milestoneRepository.getMilestonesByProject(projectId);
-      _milestones = supabaseMilestones.map((m) => MilestoneModel.fromJson(m.toMap())).toList();
+      // Check connectivity
+      final connectivityResult = await _connectivity.checkConnectivity();
+      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.wifi) ||
+          connectivityResult.contains(ConnectivityResult.ethernet);
+
+      if (isOnline) {
+        try {
+          // Try to load from Supabase first
+          final supabaseMilestones = await _milestoneRepository.getMilestonesByProject(projectId);
+          _milestones = supabaseMilestones.map((m) => MilestoneModel.fromJson(m.toMap())).toList();
+          
+          // Save to SQLite for offline access
+          for (final milestone in _milestones) {
+            final existing = await _dbHelper.getMilestone(milestone.id);
+            if (existing == null) {
+              await _dbHelper.insertMilestone(milestone, needsSync: false);
+              await _dbHelper.markMilestoneAsSynced(milestone.id, milestone.id);
+            } else {
+              await _dbHelper.updateMilestone(milestone);
+            }
+          }
+        } catch (e) {
+          // If Supabase fails, fall back to SQLite
+          _milestones = await _dbHelper.getMilestonesByProject(projectId);
+        }
+      } else {
+        // Offline: load from SQLite
+        _milestones = await _dbHelper.getMilestonesByProject(projectId);
+      }
+
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Failed to load milestones: ${e.toString()}';
-      notifyListeners();
+      // If everything fails, try SQLite as last resort
+      try {
+        _milestones = await _dbHelper.getMilestonesByProject(projectId);
+        notifyListeners();
+      } catch (dbError) {
+        _errorMessage = 'Failed to load milestones: ${e.toString()}';
+        notifyListeners();
+      }
     }
   }
 

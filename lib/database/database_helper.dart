@@ -311,14 +311,14 @@ class DatabaseHelper {
     );
     if (existing.isNotEmpty) {
       map['supabaseId'] = existing.first['supabaseId'] ?? milestone.id;
-      if (existing.first['isSynced'] == 1) {
-        map['needsSync'] = 1;
-      }
+      map['isSynced'] = existing.first['isSynced'] ?? 0;
+      // Always mark as needing sync when updated (unless it's a local-only milestone)
+      map['needsSync'] = 1;
     } else {
       map['supabaseId'] = milestone.id;
+      map['isSynced'] = 0;
       map['needsSync'] = 1;
     }
-    map['isSynced'] = existing.isNotEmpty ? existing.first['isSynced'] : 0;
     map['deleted'] = 0;
     return await db.update(
       'milestones',

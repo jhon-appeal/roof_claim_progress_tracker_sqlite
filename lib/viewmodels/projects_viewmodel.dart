@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roof_claim_progress_tracker_sqlite/database/database_helper.dart';
 import 'package:roof_claim_progress_tracker_sqlite/models/supabase_models.dart';
 import 'package:roof_claim_progress_tracker_sqlite/repository/supabase_project_repository.dart';
 import 'package:roof_claim_progress_tracker_sqlite/services/auth_service.dart';
@@ -7,6 +9,8 @@ import 'package:roof_claim_progress_tracker_sqlite/shared/models/project_model.d
 class ProjectsViewModel extends ChangeNotifier {
   final SupabaseProjectRepository _projectRepository = SupabaseProjectRepository();
   final AuthService _authService = AuthService();
+  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  final Connectivity _connectivity = Connectivity();
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -22,14 +26,50 @@ class ProjectsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final supabaseProjects = await _projectRepository.getAllProjects();
-      _projects = supabaseProjects.map((p) => ProjectModel.fromJson(p.toMap())).toList();
+      // Check connectivity
+      final connectivityResult = await _connectivity.checkConnectivity();
+      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.wifi) ||
+          connectivityResult.contains(ConnectivityResult.ethernet);
+
+      if (isOnline) {
+        try {
+          // Try to load from Supabase first
+          final supabaseProjects = await _projectRepository.getAllProjects();
+          _projects = supabaseProjects.map((p) => ProjectModel.fromJson(p.toMap())).toList();
+          
+          // Also save to SQLite for offline access
+          for (final project in _projects) {
+            final existing = await _dbHelper.getProject(project.id);
+            if (existing == null) {
+              await _dbHelper.insertProject(project, needsSync: false);
+              await _dbHelper.markProjectAsSynced(project.id, project.id);
+            } else {
+              await _dbHelper.updateProject(project);
+            }
+          }
+        } catch (e) {
+          // If Supabase fails, fall back to SQLite
+          _projects = await _dbHelper.getAllProjects();
+        }
+      } else {
+        // Offline: load from SQLite
+        _projects = await _dbHelper.getAllProjects();
+      }
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Failed to load projects: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
+      // If everything fails, try SQLite as last resort
+      try {
+        _projects = await _dbHelper.getAllProjects();
+        _isLoading = false;
+        notifyListeners();
+      } catch (dbError) {
+        _errorMessage = 'Failed to load projects: ${e.toString()}';
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -79,7 +119,28 @@ class ProjectsViewModel extends ChangeNotifier {
           projectToCreate = project.copyWith(homeownerId: currentUser.id);
       }
 
-      await _projectRepository.createProject(projectToCreate);
+      // Always save to SQLite first
+      final projectModel = ProjectModel.fromJson(projectToCreate.toMap());
+      await _dbHelper.insertProject(projectModel, needsSync: true);
+
+      // Check connectivity
+      final connectivityResult = await _connectivity.checkConnectivity();
+      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.wifi) ||
+          connectivityResult.contains(ConnectivityResult.ethernet);
+
+      if (isOnline) {
+        try {
+          // Try to create in Supabase
+          await _projectRepository.createProject(projectToCreate);
+          // Mark as synced
+          await _dbHelper.markProjectAsSynced(projectModel.id, projectModel.id);
+        } catch (e) {
+          // If Supabase fails, project is still saved locally and will sync later
+        }
+      }
+      // If offline, project is saved locally and will sync later
+
       await loadProjects();
       _isLoading = false;
       notifyListeners();
