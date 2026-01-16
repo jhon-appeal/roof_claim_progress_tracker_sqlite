@@ -3,33 +3,25 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart';
 
 /// Supabase configuration and initialization
+/// Only uses values from .env file
 class SupabaseConfig {
-  // Fallback values (can be overridden by .env file)
-  static const String defaultUrl = 'https://qiacdnrjqbiyfzyrvrnl.supabase.co';
-  static const String defaultAnonKey = 'sb_publishable_MSBWxTQbhAt7Xs_xNu1M9Q_Av7fBSvS';
-
-  static String? _supabaseUrl;
-  static String? _supabaseAnonKey;
-
   static Future<void> initialize() async {
     try {
-      // Try to load environment variables from .env file
+      // Load environment variables from .env file
       await dotenv.load(fileName: '.env');
-      
-      _supabaseUrl = dotenv.env['SUPABASE_URL'];
-      _supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
     } catch (e) {
-      // .env file not found or error loading it - use default values
+      // .env file not found or error loading it
       debugPrint('Could not load .env file: $e');
-      debugPrint('Using default Supabase configuration');
+      debugPrint('Supabase will not be initialized');
+      return;
     }
 
-    // Use values from .env if available, otherwise use defaults
-    final supabaseUrl = _supabaseUrl ?? defaultUrl;
-    final supabaseAnonKey = _supabaseAnonKey ?? defaultAnonKey;
+    final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+    final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
     if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
-      debugPrint('Warning: Supabase URL or Anon Key is empty');
+      debugPrint('Warning: SUPABASE_URL or SUPABASE_ANON_KEY is missing in .env file');
+      debugPrint('Supabase will not be initialized');
       return; // Don't initialize Supabase if credentials are missing
     }
 
