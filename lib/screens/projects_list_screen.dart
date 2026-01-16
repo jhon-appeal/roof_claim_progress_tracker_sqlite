@@ -96,10 +96,6 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                       children: [
                         const SizedBox(height: 8),
                         _buildStatusChip(project.status),
-                        if (project.claimNumber != null) ...[
-                          const SizedBox(height: 4),
-                          Text('Claim: ${project.claimNumber}'),
-                        ],
                       ],
                     ),
                     trailing: const Icon(Icons.chevron_right),

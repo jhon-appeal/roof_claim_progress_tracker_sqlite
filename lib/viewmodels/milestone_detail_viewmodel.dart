@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:roof_claim_progress_tracker_sqlite/core/utils/constants.dart';
 import 'package:roof_claim_progress_tracker_sqlite/models/supabase_models.dart';
 import 'package:roof_claim_progress_tracker_sqlite/repository/supabase_milestone_repository.dart';
@@ -11,6 +12,7 @@ class MilestoneDetailViewModel extends ChangeNotifier {
   final SupabaseMilestoneRepository _milestoneRepository = SupabaseMilestoneRepository();
   final SupabasePhotoRepository _photoRepository = SupabasePhotoRepository();
   final AuthService _authService = AuthService();
+  final Connectivity _connectivity = Connectivity();
 
   bool _isLoading = false;
   bool _isUploading = false;
@@ -54,6 +56,18 @@ class MilestoneDetailViewModel extends ChangeNotifier {
   }
 
   Future<void> loadPhotos(String milestoneId) async {
+    // Check if online before loading photos
+    final connectivityResult = await _connectivity.checkConnectivity();
+    final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+        connectivityResult.contains(ConnectivityResult.wifi) ||
+        connectivityResult.contains(ConnectivityResult.ethernet);
+
+    if (!isOnline) {
+      _errorMessage = 'Photos require an internet connection. Please connect to the internet to view photos.';
+      notifyListeners();
+      return;
+    }
+
     try {
       final supabasePhotos = await _photoRepository.getPhotosByMilestone(milestoneId);
       _photos = supabasePhotos.map((p) => ProgressPhotoModel.fromJson(p.toMap())).toList();
@@ -204,6 +218,19 @@ class MilestoneDetailViewModel extends ChangeNotifier {
     _isUploading = true;
     _errorMessage = null;
     notifyListeners();
+
+    // Check if online before uploading photos
+    final connectivityResult = await _connectivity.checkConnectivity();
+    final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+        connectivityResult.contains(ConnectivityResult.wifi) ||
+        connectivityResult.contains(ConnectivityResult.ethernet);
+
+    if (!isOnline) {
+      _errorMessage = 'Photo upload requires an internet connection. Please connect to the internet to upload photos.';
+      _isUploading = false;
+      notifyListeners();
+      return false;
+    }
 
     try {
       if (_milestone == null) {

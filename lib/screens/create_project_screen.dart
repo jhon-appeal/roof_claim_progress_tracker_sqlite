@@ -13,14 +13,10 @@ class CreateProjectScreen extends StatefulWidget {
 class _CreateProjectScreenState extends State<CreateProjectScreen> {
   final _formKey = GlobalKey<FormState>();
   final _addressController = TextEditingController();
-  final _claimNumberController = TextEditingController();
-  final _insuranceCompanyController = TextEditingController();
 
   @override
   void dispose() {
     _addressController.dispose();
-    _claimNumberController.dispose();
-    _insuranceCompanyController.dispose();
     super.dispose();
   }
 
@@ -32,12 +28,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     final viewModel = context.read<ProjectsViewModel>();
     final success = await viewModel.createProject(
       address: _addressController.text.trim(),
-      claimNumber: _claimNumberController.text.trim().isEmpty
-          ? null
-          : _claimNumberController.text.trim(),
-      insuranceCompany: _insuranceCompanyController.text.trim().isEmpty
-          ? null
-          : _insuranceCompanyController.text.trim(),
     );
 
     if (mounted) {
@@ -97,41 +87,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
                       return null;
                     },
                     textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Claim Number Field
-                  TextFormField(
-                    controller: _claimNumberController,
-                    decoration: InputDecoration(
-                      labelText: 'Claim Number',
-                      hintText: 'Enter insurance claim number (optional)',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      prefixIcon: const Icon(Icons.numbers),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                    ),
-                    textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Insurance Company Field
-                  TextFormField(
-                    controller: _insuranceCompanyController,
-                    decoration: InputDecoration(
-                      labelText: 'Insurance Company',
-                      hintText: 'Enter insurance company name (optional)',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      prefixIcon: const Icon(Icons.business),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                    ),
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _submitForm(),
                   ),
                   const SizedBox(height: 32),
 

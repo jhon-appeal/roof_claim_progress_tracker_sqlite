@@ -5,8 +5,6 @@ class ProjectModel {
   final String? roofingCompanyId;
   final String? assessDirectId;
   final String status;
-  final String? claimNumber;
-  final String? insuranceCompany;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -17,8 +15,6 @@ class ProjectModel {
     this.roofingCompanyId,
     this.assessDirectId,
     required this.status,
-    this.claimNumber,
-    this.insuranceCompany,
     this.createdAt,
     this.updatedAt,
   });
@@ -31,8 +27,6 @@ class ProjectModel {
       roofingCompanyId: json['roofing_company_id'] as String?,
       assessDirectId: json['assess_direct_id'] as String?,
       status: json['status'] as String? ?? 'pending',
-      claimNumber: json['claim_number'] as String?,
-      insuranceCompany: json['insurance_company'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : null,
@@ -50,8 +44,6 @@ class ProjectModel {
       'roofing_company_id': roofingCompanyId,
       'assess_direct_id': assessDirectId,
       'status': status,
-      'claim_number': claimNumber,
-      'insurance_company': insuranceCompany,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };

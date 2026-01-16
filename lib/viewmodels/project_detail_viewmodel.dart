@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:roof_claim_progress_tracker_sqlite/core/utils/constants.dart';
+import 'package:roof_claim_progress_tracker_sqlite/database/database_helper.dart';
 import 'package:roof_claim_progress_tracker_sqlite/models/supabase_models.dart';
 import 'package:roof_claim_progress_tracker_sqlite/repository/supabase_milestone_repository.dart';
 import 'package:roof_claim_progress_tracker_sqlite/repository/supabase_project_repository.dart';
@@ -11,6 +13,8 @@ class ProjectDetailViewModel extends ChangeNotifier {
   final SupabaseProjectRepository _projectRepository = SupabaseProjectRepository();
   final SupabaseMilestoneRepository _milestoneRepository = SupabaseMilestoneRepository();
   final AuthService _authService = AuthService();
+  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  final Connectivity _connectivity = Connectivity();
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -154,43 +158,87 @@ class ProjectDetailViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Convert string to ProjectStatus enum
-      ProjectStatus? projectStatus;
-      switch (newStatusLower) {
-        case 'pending':
-          projectStatus = ProjectStatus.pending;
-          break;
-        case 'inspection':
-          projectStatus = ProjectStatus.inspection;
-          break;
-        case 'claim_lodged':
-          projectStatus = ProjectStatus.claimLodged;
-          break;
-        case 'claim_approved':
-          projectStatus = ProjectStatus.claimApproved;
-          break;
-        case 'construction':
-          projectStatus = ProjectStatus.construction;
-          break;
-        case 'completed':
-          projectStatus = ProjectStatus.completed;
-          break;
-        case 'closed':
-          projectStatus = ProjectStatus.closed;
-          break;
+      // Always update local SQLite first
+      final updatedProject = ProjectModel(
+        id: _project!.id,
+        address: _project!.address,
+        homeownerId: _project!.homeownerId,
+        roofingCompanyId: _project!.roofingCompanyId,
+        assessDirectId: _project!.assessDirectId,
+        status: newStatus,
+        createdAt: _project!.createdAt,
+        updatedAt: DateTime.now(),
+      );
+
+      // Save to SQLite with needsSync = true
+      await _dbHelper.updateProject(updatedProject);
+      _project = updatedProject;
+
+      // Check if online to sync to Supabase
+      final connectivityResult = await _connectivity.checkConnectivity();
+      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.wifi) ||
+          connectivityResult.contains(ConnectivityResult.ethernet);
+
+      bool syncedToSupabase = false;
+      if (isOnline) {
+        try {
+          // Convert string to ProjectStatus enum
+          ProjectStatus? projectStatus;
+          switch (newStatusLower) {
+            case 'pending':
+              projectStatus = ProjectStatus.pending;
+              break;
+            case 'inspection':
+              projectStatus = ProjectStatus.inspection;
+              break;
+            case 'claim_lodged':
+              projectStatus = ProjectStatus.claimLodged;
+              break;
+            case 'claim_approved':
+              projectStatus = ProjectStatus.claimApproved;
+              break;
+            case 'construction':
+              projectStatus = ProjectStatus.construction;
+              break;
+            case 'completed':
+              projectStatus = ProjectStatus.completed;
+              break;
+            case 'closed':
+              projectStatus = ProjectStatus.closed;
+              break;
+          }
+
+          if (projectStatus != null) {
+            final userId = _authService.currentUser?.id ?? '';
+            await _projectRepository.updateProjectStatus(
+              _project!.id,
+              projectStatus,
+              userId,
+            );
+            // Mark as synced after successful update
+            await _dbHelper.markProjectAsSynced(_project!.id, _project!.id);
+            syncedToSupabase = true;
+          }
+        } catch (e) {
+          // If Supabase update fails, the project is still saved locally with needsSync = true
+          // It will sync later when connection is restored
+          // Don't fail the operation since local update succeeded
+          syncedToSupabase = false;
+        }
+      }
+      // If offline, project is saved locally and will sync when connection is restored
+      
+      // Store info about sync status for UI feedback
+      if (!isOnline) {
+        // Project saved locally, will sync later
+        // The error message can be used to inform user
+        // but we won't set it as an error since the operation succeeded locally
       }
 
-      if (projectStatus != null) {
-        final userId = _authService.currentUser?.id ?? '';
-        await _projectRepository.updateProjectStatus(
-          _project!.id,
-          projectStatus,
-          userId,
-        );
-        await loadProject(_project!.id);
-        return true;
-      }
-      return false;
+      _isLoading = false;
+      notifyListeners();
+      return true;
     } catch (e) {
       _errorMessage = 'Failed to update status: ${e.toString()}';
       _isLoading = false;

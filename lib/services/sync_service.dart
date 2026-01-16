@@ -1,14 +1,14 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:roof_claim_progress_tracker_sqlite/config/supabase_config.dart';
 import 'package:roof_claim_progress_tracker_sqlite/database/database_helper.dart';
-import 'package:roof_claim_progress_tracker_sqlite/models/claim.dart';
-import 'package:uuid/uuid.dart';
+import 'package:roof_claim_progress_tracker_sqlite/shared/models/project_model.dart';
+import 'package:roof_claim_progress_tracker_sqlite/shared/models/milestone_model.dart';
+import 'package:roof_claim_progress_tracker_sqlite/models/supabase_models.dart';
 
 /// Service to handle synchronization between SQLite and Supabase
 class SyncService {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   final Connectivity _connectivity = Connectivity();
-  final Uuid _uuid = const Uuid();
 
   /// Check if device is online
   Future<bool> isOnline() async {
@@ -28,203 +28,318 @@ class SyncService {
   }
 
   /// Sync all pending changes to Supabase
-  Future<void> syncToSupabase() async {
+  Future<bool> syncToSupabase() async {
     if (!await isOnline()) {
-      return;
+      return false;
     }
 
     if (!SupabaseConfig.isInitialized) {
-      return;
+      return false;
     }
 
     try {
       final client = SupabaseConfig.client;
-      final db = await _dbHelper.database;
 
-      // Sync new/updated claims
-      final claimsToSync = await _dbHelper.getClaimsNeedingSync();
-      for (final claim in claimsToSync) {
+      // Sync new/updated projects
+      final projectsToSync = await _dbHelper.getProjectsNeedingSync();
+      for (final project in projectsToSync) {
         try {
-          if (claim.id == null) continue;
+          final supabaseId = project.id;
 
-          // Get supabaseId from database
-          final result = await db.query(
-            'claims',
-            columns: ['supabaseId'],
-            where: 'id = ?',
-            whereArgs: [claim.id],
-          );
-          final supabaseIdFromDb = result.isNotEmpty
-              ? result.first['supabaseId'] as String?
-              : null;
+          final projectMap = project.toJson();
+          // Remove local id, use supabase id
+          final supabaseProjectMap = Map<String, dynamic>.from(projectMap);
+          supabaseProjectMap.remove('id');
 
-          final claimMap = {
-            'homeowner_name': claim.homeownerName,
-            'address': claim.address,
-            'phone_number': claim.phoneNumber,
-            'insurance_company': claim.insuranceCompany,
-            'claim_number': claim.claimNumber,
-            'status': claim.status,
-            'notes': claim.notes,
-            'created_at': claim.createdAt.toIso8601String(),
-            'updated_at': claim.updatedAt.toIso8601String(),
-          };
+          // Check if project exists in Supabase
+          try {
+            final existing = await client
+                .from('projects')
+                .select('id')
+                .eq('id', supabaseId)
+                .maybeSingle();
 
-          String? supabaseId = supabaseIdFromDb;
+            if (existing != null) {
+              // Update existing project in Supabase
+              await client
+                  .from('projects')
+                  .update(supabaseProjectMap)
+                  .eq('id', supabaseId);
+            } else {
+              // Create new project in Supabase
+              supabaseProjectMap['id'] = supabaseId;
+              await client.from('projects').insert(supabaseProjectMap);
+            }
 
-          if (supabaseId != null) {
-            // Update existing claim in Supabase
-            await client
-                .from('claims')
-                .update(claimMap)
-                .eq('id', supabaseId);
-          } else {
-            // Create new claim in Supabase
-            supabaseId = _uuid.v4();
-            claimMap['id'] = supabaseId;
-            await client.from('claims').insert(claimMap);
-          }
-
-          // Mark as synced
-          if (claim.id != null && supabaseId != null) {
-            await _dbHelper.markClaimAsSynced(claim.id!, supabaseId);
+            // Mark as synced
+            await _dbHelper.markProjectAsSynced(project.id, supabaseId);
+          } catch (e) {
+            // Continue with next project if one fails
+            continue;
           }
         } catch (e) {
-          // Continue with next claim if one fails
+          // Continue with next project if one fails
           continue;
         }
       }
 
-      // Sync deleted claims
-      final deletedClaims = await _dbHelper.getDeletedClaimsNeedingSync();
-      for (final claim in deletedClaims) {
+      // Sync deleted projects
+      final deletedProjects = await _dbHelper.getDeletedProjectsNeedingSync();
+      for (final project in deletedProjects) {
         try {
-          if (claim.id == null) continue;
+          final supabaseId = project.id;
 
-          final db2 = await _dbHelper.database;
-          final result = await db2.query(
-            'claims',
-            columns: ['supabaseId'],
-            where: 'id = ?',
-            whereArgs: [claim.id],
-          );
-          final supabaseId = result.isNotEmpty
-              ? result.first['supabaseId'] as String?
-              : null;
-
-          if (supabaseId != null) {
+          // Check if it was synced before (has supabase id)
+          final existingProject = await _dbHelper.getProject(project.id);
+          if (existingProject != null) {
             // Delete from Supabase
-            await client.from('claims').delete().eq('id', supabaseId);
+            await client.from('projects').delete().eq('id', supabaseId);
           }
 
           // Remove from local database after successful sync
-          final db3 = await _dbHelper.database;
-          await db3.delete('claims', where: 'id = ?', whereArgs: [claim.id]);
+          final db = await _dbHelper.database;
+          await db.delete('projects', where: 'id = ?', whereArgs: [project.id]);
         } catch (e) {
-          // Continue with next claim if one fails
+          // Continue with next project if one fails
           continue;
         }
       }
+
+      // Sync new/updated milestones
+      final milestonesToSync = await _dbHelper.getMilestonesNeedingSync();
+      for (final milestone in milestonesToSync) {
+        try {
+          final supabaseId = milestone.id;
+
+          final milestoneMap = milestone.toJson();
+          // Remove local id, use supabase id
+          final supabaseMilestoneMap = Map<String, dynamic>.from(milestoneMap);
+          supabaseMilestoneMap.remove('id');
+
+          // Check if milestone exists in Supabase
+          try {
+            final existing = await client
+                .from('milestones')
+                .select('id')
+                .eq('id', supabaseId)
+                .maybeSingle();
+
+            if (existing != null) {
+              // Update existing milestone in Supabase
+              await client
+                  .from('milestones')
+                  .update(supabaseMilestoneMap)
+                  .eq('id', supabaseId);
+            } else {
+              // Create new milestone in Supabase
+              supabaseMilestoneMap['id'] = supabaseId;
+              await client.from('milestones').insert(supabaseMilestoneMap);
+            }
+
+            // Mark as synced
+            await _dbHelper.markMilestoneAsSynced(milestone.id, supabaseId);
+          } catch (e) {
+            // Continue with next milestone if one fails
+            continue;
+          }
+        } catch (e) {
+          // Continue with next milestone if one fails
+          continue;
+        }
+      }
+
+      // Sync deleted milestones
+      final deletedMilestones = await _dbHelper.getDeletedMilestonesNeedingSync();
+      for (final milestone in deletedMilestones) {
+        try {
+          final supabaseId = milestone.id;
+
+          // Delete from Supabase
+          await client.from('milestones').delete().eq('id', supabaseId);
+
+          // Remove from local database after successful sync
+          final db = await _dbHelper.database;
+          await db.delete('milestones', where: 'id = ?', whereArgs: [milestone.id]);
+        } catch (e) {
+          // Continue with next milestone if one fails
+          continue;
+        }
+      }
+
+      return true;
     } catch (e) {
-      // Sync failed, but app continues to work offline
+      // Sync failed
+      return false;
     }
   }
 
   /// Pull data from Supabase to SQLite
-  Future<void> syncFromSupabase() async {
+  Future<bool> syncFromSupabase() async {
     if (!await isOnline()) {
-      return;
+      return false;
     }
 
     if (!SupabaseConfig.isInitialized) {
-      return;
+      return false;
     }
 
     try {
       final client = SupabaseConfig.client;
-      final response = await client
-          .from('claims')
+
+      // Sync projects
+      final projectsResponse = await client
+          .from('projects')
           .select()
           .order('updated_at', ascending: false);
 
-      if (response == null) return;
+      if (projectsResponse != null) {
+        final projects = (projectsResponse as List)
+            .map((json) => Project.fromMap(json as Map<String, dynamic>))
+            .toList();
 
-      final claims = (response as List).map((json) {
-        return {
-          'supabaseId': json['id'] as String?,
-          'homeownerName': json['homeowner_name'] as String? ?? '',
-          'address': json['address'] as String? ?? '',
-          'phoneNumber': json['phone_number'] as String? ?? '',
-          'insuranceCompany': json['insurance_company'] as String? ?? '',
-          'claimNumber': json['claim_number'] as String? ?? '',
-          'status': json['status'] as String? ?? '',
-          'notes': json['notes'] as String? ?? '',
-          'createdAt': json['created_at'] as String? ?? '',
-          'updatedAt': json['updated_at'] as String? ?? '',
-        };
-      }).toList();
+        for (final supabaseProject in projects) {
+          final supabaseId = supabaseProject.id;
 
-      final db = await _dbHelper.database;
+          // Check if project already exists locally
+          final existingProject = await _dbHelper.getProjectBySupabaseId(supabaseId);
 
-      for (final claimData in claims) {
-        final supabaseId = claimData['supabaseId'] as String?;
-        if (supabaseId == null) continue;
-
-        // Check if claim already exists locally
-        final existingClaim =
-            await _dbHelper.getClaimBySupabaseId(supabaseId);
-
-        if (existingClaim == null) {
-          // Insert new claim
-          await db.insert('claims', {
-            ...claimData,
-            'isSynced': 1,
-            'needsSync': 0,
-            'deleted': 0,
-          });
-        } else {
-          // Update existing claim if Supabase version is newer
-          final localUpdatedAt = DateTime.parse(
-            claimData['updatedAt'] as String,
-          );
-          if (localUpdatedAt.isAfter(existingClaim.updatedAt) ||
-              existingClaim.updatedAt.isAtSameMomentAs(localUpdatedAt)) {
-            // Only update if local doesn't have unsynced changes
-            final db2 = await _dbHelper.database;
-            final result = await db2.query(
-              'claims',
-              columns: ['needsSync'],
-              where: 'id = ?',
-              whereArgs: [existingClaim.id],
+          if (existingProject == null) {
+            // Insert new project
+            final projectModel = ProjectModel(
+              id: supabaseProject.id,
+              address: supabaseProject.address,
+              homeownerId: supabaseProject.homeownerId,
+              roofingCompanyId: supabaseProject.roofingCompanyId,
+              assessDirectId: supabaseProject.assessDirectId,
+              status: supabaseProject.status.toSupabaseValue(),
+              createdAt: supabaseProject.createdAt,
+              updatedAt: supabaseProject.updatedAt,
             );
-            final needsSync = result.isNotEmpty
-                ? (result.first['needsSync'] as int? ?? 0) == 1
-                : false;
+            await _dbHelper.insertProject(projectModel, needsSync: false);
+            await _dbHelper.markProjectAsSynced(projectModel.id, supabaseId);
+          } else {
+            // Update existing project if Supabase version is newer
+            final localUpdatedAt = existingProject.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final supabaseUpdatedAt = supabaseProject.updatedAt;
 
-            if (!needsSync) {
-              await db.update(
-                'claims',
-                {
-                  ...claimData,
-                  'isSynced': 1,
-                  'needsSync': 0,
-                },
+            if (supabaseUpdatedAt.isAfter(localUpdatedAt) ||
+                supabaseUpdatedAt.isAtSameMomentAs(localUpdatedAt)) {
+              // Only update if local doesn't have unsynced changes
+              final db = await _dbHelper.database;
+              final result = await db.query(
+                'projects',
+                columns: ['needsSync'],
                 where: 'id = ?',
-                whereArgs: [existingClaim.id],
+                whereArgs: [existingProject.id],
               );
+              final needsSync = result.isNotEmpty
+                  ? (result.first['needsSync'] as int? ?? 0) == 1
+                  : false;
+
+              if (!needsSync) {
+                final projectModel = ProjectModel(
+                  id: supabaseProject.id,
+                  address: supabaseProject.address,
+                  homeownerId: supabaseProject.homeownerId,
+                  roofingCompanyId: supabaseProject.roofingCompanyId,
+                  assessDirectId: supabaseProject.assessDirectId,
+                  status: supabaseProject.status.toSupabaseValue(),
+                  createdAt: supabaseProject.createdAt,
+                  updatedAt: supabaseProject.updatedAt,
+                );
+                await _dbHelper.updateProject(projectModel);
+                // Mark as synced after update
+                await _dbHelper.markProjectAsSynced(projectModel.id, supabaseId);
+              }
             }
           }
         }
       }
+
+      // Sync milestones
+      final milestonesResponse = await client
+          .from('milestones')
+          .select()
+          .order('updated_at', ascending: false);
+
+      if (milestonesResponse != null) {
+        final milestones = (milestonesResponse as List)
+            .map((json) => Milestone.fromMap(json as Map<String, dynamic>))
+            .toList();
+
+        for (final supabaseMilestone in milestones) {
+          final supabaseId = supabaseMilestone.id;
+
+          // Check if milestone already exists locally
+          final existingMilestone = await _dbHelper.getMilestoneBySupabaseId(supabaseId);
+
+          if (existingMilestone == null) {
+            // Insert new milestone
+            final milestoneModel = MilestoneModel(
+              id: supabaseMilestone.id,
+              projectId: supabaseMilestone.projectId,
+              name: supabaseMilestone.name,
+              description: supabaseMilestone.description,
+              status: supabaseMilestone.status.toSupabaseValue(),
+              dueDate: supabaseMilestone.dueDate,
+              completedAt: supabaseMilestone.completedAt,
+              createdAt: supabaseMilestone.createdAt,
+              updatedAt: supabaseMilestone.updatedAt,
+            );
+            await _dbHelper.insertMilestone(milestoneModel, needsSync: false);
+            await _dbHelper.markMilestoneAsSynced(milestoneModel.id, supabaseId);
+          } else {
+            // Update existing milestone if Supabase version is newer
+            final localUpdatedAt = existingMilestone.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final supabaseUpdatedAt = supabaseMilestone.updatedAt;
+
+            if (supabaseUpdatedAt.isAfter(localUpdatedAt) ||
+                supabaseUpdatedAt.isAtSameMomentAs(localUpdatedAt)) {
+              // Only update if local doesn't have unsynced changes
+              final db = await _dbHelper.database;
+              final result = await db.query(
+                'milestones',
+                columns: ['needsSync'],
+                where: 'id = ?',
+                whereArgs: [existingMilestone.id],
+              );
+              final needsSync = result.isNotEmpty
+                  ? (result.first['needsSync'] as int? ?? 0) == 1
+                  : false;
+
+              if (!needsSync) {
+                final milestoneModel = MilestoneModel(
+                  id: supabaseMilestone.id,
+                  projectId: supabaseMilestone.projectId,
+                  name: supabaseMilestone.name,
+                  description: supabaseMilestone.description,
+                  status: supabaseMilestone.status.toSupabaseValue(),
+                  dueDate: supabaseMilestone.dueDate,
+                  completedAt: supabaseMilestone.completedAt,
+                  createdAt: supabaseMilestone.createdAt,
+                  updatedAt: supabaseMilestone.updatedAt,
+                );
+                await _dbHelper.updateMilestone(milestoneModel);
+                // Mark as synced after update
+                await _dbHelper.markMilestoneAsSynced(milestoneModel.id, supabaseId);
+              }
+            }
+          }
+        }
+      }
+
+      return true;
     } catch (e) {
-      // Sync failed, but app continues to work offline
+      // Sync failed
+      return false;
     }
   }
 
   /// Full sync: pull from Supabase then push local changes
-  Future<void> fullSync() async {
-    await syncFromSupabase();
-    await syncToSupabase();
+  Future<bool> fullSync() async {
+    final pullSuccess = await syncFromSupabase();
+    final pushSuccess = await syncToSupabase();
+    return pullSuccess && pushSuccess;
   }
 
   /// Initial sync for fresh install: fetch all data from Supabase
@@ -248,52 +363,10 @@ class SyncService {
     final isEmpty = await _dbHelper.isEmpty();
     if (!isEmpty) {
       // Database already has data, use regular sync
-      await syncFromSupabase();
-      return true;
+      return await syncFromSupabase();
     }
 
-    try {
-      final response = await client
-          .from('claims')
-          .select()
-          .order('updated_at', ascending: false);
-
-      if (response == null) return false;
-
-      final claims = (response as List).map((json) {
-        return {
-          'supabaseId': json['id'] as String?,
-          'homeownerName': json['homeowner_name'] as String? ?? '',
-          'address': json['address'] as String? ?? '',
-          'phoneNumber': json['phone_number'] as String? ?? '',
-          'insuranceCompany': json['insurance_company'] as String? ?? '',
-          'claimNumber': json['claim_number'] as String? ?? '',
-          'status': json['status'] as String? ?? '',
-          'notes': json['notes'] as String? ?? '',
-          'createdAt': json['created_at'] as String? ?? '',
-          'updatedAt': json['updated_at'] as String? ?? '',
-        };
-      }).toList();
-
-      final db = await _dbHelper.database;
-
-      // Insert all claims from Supabase
-      for (final claimData in claims) {
-        final supabaseId = claimData['supabaseId'] as String?;
-        if (supabaseId == null) continue;
-
-        await db.insert('claims', {
-          ...claimData,
-          'isSynced': 1,
-          'needsSync': 0,
-          'deleted': 0,
-        });
-      }
-
-      return true;
-    } catch (e) {
-      // Initial sync failed
-      return false;
-    }
+    // Use regular sync which handles both insert and update
+    return await syncFromSupabase();
   }
 }

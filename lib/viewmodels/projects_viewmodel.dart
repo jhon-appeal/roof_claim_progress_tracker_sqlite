@@ -35,8 +35,6 @@ class ProjectsViewModel extends ChangeNotifier {
 
   Future<bool> createProject({
     required String address,
-    String? claimNumber,
-    String? insuranceCompany,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -62,8 +60,6 @@ class ProjectsViewModel extends ChangeNotifier {
       // Create project with appropriate user role ID
       final project = Project(
         address: address,
-        claimNumber: claimNumber,
-        insuranceCompany: insuranceCompany,
         status: ProjectStatus.pending,
       );
 

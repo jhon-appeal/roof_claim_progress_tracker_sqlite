@@ -107,14 +107,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                               project.status,
                             ),
                           ],
-                          if (project.claimNumber != null) ...[
-                            const SizedBox(height: 8),
-                            Text('Claim Number: ${project.claimNumber}'),
-                          ],
-                          if (project.insuranceCompany != null) ...[
-                            const SizedBox(height: 8),
-                            Text('Insurance: ${project.insuranceCompany}'),
-                          ],
                         ],
                       ),
                     ),

@@ -3,10 +3,87 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:roof_claim_progress_tracker_sqlite/core/theme/app_theme.dart';
 import 'package:roof_claim_progress_tracker_sqlite/core/utils/constants.dart';
+import 'package:roof_claim_progress_tracker_sqlite/services/sync_service.dart';
 import 'package:roof_claim_progress_tracker_sqlite/viewmodels/auth_viewmodel.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final SyncService _syncService = SyncService();
+  bool _isSyncing = false;
+  bool? _lastSyncSuccess;
+  String? _syncError;
+
+  Future<void> _performSync() async {
+    setState(() {
+      _isSyncing = true;
+      _syncError = null;
+    });
+
+    try {
+      final success = await _syncService.fullSync();
+      setState(() {
+        _isSyncing = false;
+        _lastSyncSuccess = success;
+        if (!success) {
+          _syncError = 'Sync failed. Please check your internet connection.';
+        }
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Sync completed successfully' : (_syncError ?? 'Sync failed')),
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isSyncing = false;
+        _lastSyncSuccess = false;
+        _syncError = 'Sync error: ${e.toString()}';
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_syncError ?? 'Sync failed'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildSyncIcon() {
+    if (_isSyncing) {
+      return const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      );
+    }
+
+    if (_lastSyncSuccess == null) {
+      // No sync attempted yet
+      return const Icon(Icons.sync);
+    }
+
+    if (_lastSyncSuccess == true) {
+      return const Icon(Icons.check_circle, color: Colors.green);
+    }
+
+    return const Icon(Icons.error, color: Colors.red);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +96,17 @@ class DashboardScreen extends StatelessWidget {
           appBar: AppBar(
             title: const Text('Dashboard'),
             actions: [
+              IconButton(
+                icon: _buildSyncIcon(),
+                tooltip: _isSyncing
+                    ? 'Syncing...'
+                    : _lastSyncSuccess == true
+                        ? 'Last sync successful'
+                        : _lastSyncSuccess == false
+                            ? 'Last sync failed'
+                            : 'Sync',
+                onPressed: _isSyncing ? null : _performSync,
+              ),
               IconButton(
                 icon: const Icon(Icons.logout),
                 onPressed: () async {
