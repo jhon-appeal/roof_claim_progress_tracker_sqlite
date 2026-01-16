@@ -225,8 +225,6 @@ class Project {
   final String? roofingCompanyId;
   final String? assessDirectId;
   final ProjectStatus status;
-  final String? claimNumber;
-  final String? insuranceCompany;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -237,8 +235,6 @@ class Project {
     this.roofingCompanyId,
     this.assessDirectId,
     this.status = ProjectStatus.pending,
-    this.claimNumber,
-    this.insuranceCompany,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -253,8 +249,6 @@ class Project {
       'roofing_company_id': roofingCompanyId,
       'assess_direct_id': assessDirectId,
       'status': status.toSupabaseValue(),
-      'claim_number': claimNumber,
-      'insurance_company': insuranceCompany,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -268,8 +262,6 @@ class Project {
       roofingCompanyId: map['roofing_company_id'] as String?,
       assessDirectId: map['assess_direct_id'] as String?,
       status: ProjectStatusExtension.fromSupabaseValue(map['status'] as String),
-      claimNumber: map['claim_number'] as String?,
-      insuranceCompany: map['insurance_company'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
     );
@@ -282,8 +274,6 @@ class Project {
     String? roofingCompanyId,
     String? assessDirectId,
     ProjectStatus? status,
-    String? claimNumber,
-    String? insuranceCompany,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -294,8 +284,6 @@ class Project {
       roofingCompanyId: roofingCompanyId ?? this.roofingCompanyId,
       assessDirectId: assessDirectId ?? this.assessDirectId,
       status: status ?? this.status,
-      claimNumber: claimNumber ?? this.claimNumber,
-      insuranceCompany: insuranceCompany ?? this.insuranceCompany,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

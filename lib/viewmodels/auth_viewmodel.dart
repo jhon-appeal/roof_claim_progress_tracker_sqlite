@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:roof_claim_progress_tracker_sqlite/models/profile_model.dart';
+import 'package:roof_claim_progress_tracker_sqlite/shared/models/profile_model.dart';
 import 'package:roof_claim_progress_tracker_sqlite/services/auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 

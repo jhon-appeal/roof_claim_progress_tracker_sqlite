@@ -33,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (success && mounted) {
-      context.go('/claims');
+      context.go('/dashboard');
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -151,6 +151,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             : const Text('Sign In'),
                       );
                     },
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => context.go('/signup'),
+                    child: const Text("Don't have an account? Sign Up"),
                   ),
                 ],
               ),
