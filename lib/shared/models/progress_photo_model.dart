@@ -1,4 +1,5 @@
 import '../services/supabase_service.dart';
+import '../../core/utils/constants.dart';
 
 class ProgressPhotoModel {
   final String id;
@@ -45,10 +46,22 @@ class ProgressPhotoModel {
     };
   }
 
-  // Get public URL for the photo
+  // Get public URL for the photo (works if bucket is public)
   String getPublicUrl() {
     return SupabaseService.client.storage
-        .from('progress-photos')
+        .from(AppConstants.storageBucket)
         .getPublicUrl(storagePath);
+  }
+
+  // Get signed URL for the photo (works for private buckets)
+  Future<String?> getSignedUrl({int expiresIn = 3600}) async {
+    try {
+      return await SupabaseService.client.storage
+          .from(AppConstants.storageBucket)
+          .createSignedUrl(storagePath, expiresIn);
+    } catch (e) {
+      // File not found or other error - return null to fallback to public URL
+      return null;
+    }
   }
 }

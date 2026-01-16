@@ -13,12 +13,14 @@ class MilestoneDetailViewModel extends ChangeNotifier {
   final AuthService _authService = AuthService();
 
   bool _isLoading = false;
+  bool _isUploading = false;
   String? _errorMessage;
   MilestoneModel? _milestone;
   List<ProgressPhotoModel> _photos = [];
   String? _currentUserRole;
 
   bool get isLoading => _isLoading;
+  bool get isUploading => _isUploading;
   String? get errorMessage => _errorMessage;
   MilestoneModel? get milestone => _milestone;
   List<ProgressPhotoModel> get photos => _photos;
@@ -199,14 +201,14 @@ class MilestoneDetailViewModel extends ChangeNotifier {
     String imagePath,
     String? description,
   ) async {
-    _isLoading = true;
+    _isUploading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
       if (_milestone == null) {
         _errorMessage = 'Milestone not loaded';
-        _isLoading = false;
+        _isUploading = false;
         notifyListeners();
         return false;
       }
@@ -219,12 +221,12 @@ class MilestoneDetailViewModel extends ChangeNotifier {
         description: description,
       );
       await loadPhotos(milestoneId);
-      _isLoading = false;
+      _isUploading = false;
       notifyListeners();
       return true;
     } catch (e) {
       _errorMessage = 'Failed to upload photo: ${e.toString()}';
-      _isLoading = false;
+      _isUploading = false;
       notifyListeners();
       return false;
     }

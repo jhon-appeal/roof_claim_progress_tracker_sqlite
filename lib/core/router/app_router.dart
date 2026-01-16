@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:roof_claim_progress_tracker_sqlite/config/supabase_config.dart';
+import 'package:roof_claim_progress_tracker_sqlite/screens/create_project_screen.dart';
 import 'package:roof_claim_progress_tracker_sqlite/screens/dashboard_screen.dart';
 import 'package:roof_claim_progress_tracker_sqlite/screens/login_screen.dart';
 import 'package:roof_claim_progress_tracker_sqlite/screens/milestone_detail_screen.dart';
@@ -49,6 +50,29 @@ class AppRouter {
           create: (_) => ProjectsViewModel(),
           child: const ProjectsListScreen(),
         ),
+      ),
+      GoRoute(
+        path: '/projects/new',
+        builder: (context, state) {
+          // Try to reuse existing provider from parent route
+          ProjectsViewModel? existingViewModel;
+          try {
+            existingViewModel = context.read<ProjectsViewModel>();
+          } catch (e) {
+            // Provider doesn't exist in ancestor, will create new one
+            existingViewModel = null;
+          }
+
+          return existingViewModel != null
+              ? ChangeNotifierProvider<ProjectsViewModel>.value(
+                  value: existingViewModel,
+                  child: const CreateProjectScreen(),
+                )
+              : ChangeNotifierProvider<ProjectsViewModel>(
+                  create: (_) => ProjectsViewModel(),
+                  child: const CreateProjectScreen(),
+                );
+        },
       ),
       GoRoute(
         path: '/projects/:id',

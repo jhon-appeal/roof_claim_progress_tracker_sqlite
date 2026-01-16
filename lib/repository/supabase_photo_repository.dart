@@ -113,7 +113,7 @@ class SupabasePhotoRepository {
   Future<String> getPhotoUrl(String storagePath) async {
     try {
       final response = await _supabase.storage
-          .from('progress-photos')
+          .from(AppConstants.storageBucket)
           .createSignedUrl(storagePath, 3600);
 
       return response;

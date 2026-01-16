@@ -106,12 +106,17 @@ class DashboardScreen extends StatelessWidget {
                           icon: Icons.add_circle,
                           title: 'New Project',
                           color: Colors.green,
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Create project feature coming soon'),
-                              ),
-                            );
+                          onTap: () async {
+                            final result = await context.push('/projects/new');
+                            // Optionally refresh dashboard or show success message
+                            if (context.mounted && result == true) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Project created successfully'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
                           },
                         ),
                       _buildActionCard(
