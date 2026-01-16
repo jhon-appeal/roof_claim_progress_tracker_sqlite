@@ -26,20 +26,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     try {
-      final success = await _syncService.fullSync();
+      final result = await _syncService.fullSync();
+      final success = result['success'] == true;
+      final message = result['message'] as String?;
+      final error = result['error'] as String?;
+      
       setState(() {
         _isSyncing = false;
         _lastSyncSuccess = success;
         if (!success) {
-          _syncError = 'Sync failed. Please check your internet connection.';
+          _syncError = error ?? 'Sync failed. Please check your internet connection.';
+        } else {
+          _syncError = null;
         }
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Sync completed successfully' : (_syncError ?? 'Sync failed')),
+            content: Text(success 
+              ? (message ?? 'Sync completed successfully')
+              : (_syncError ?? 'Sync failed')),
             backgroundColor: success ? Colors.green : Colors.red,
+            duration: Duration(seconds: success ? 2 : 5),
           ),
         );
       }
@@ -55,6 +64,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           SnackBar(
             content: Text(_syncError ?? 'Sync failed'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }

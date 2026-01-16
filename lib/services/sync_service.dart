@@ -1,4 +1,5 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:roof_claim_progress_tracker_sqlite/config/supabase_config.dart';
 import 'package:roof_claim_progress_tracker_sqlite/database/database_helper.dart';
 import 'package:roof_claim_progress_tracker_sqlite/shared/models/project_model.dart';
@@ -14,10 +15,26 @@ class SyncService {
   Future<bool> isOnline() async {
     try {
       final connectivityResult = await _connectivity.checkConnectivity();
-      return connectivityResult.contains(ConnectivityResult.mobile) ||
+      debugPrint('Connectivity result: $connectivityResult');
+      
+      // Check for any active network connection
+      final hasConnection = connectivityResult.contains(ConnectivityResult.mobile) ||
           connectivityResult.contains(ConnectivityResult.wifi) ||
-          connectivityResult.contains(ConnectivityResult.ethernet);
+          connectivityResult.contains(ConnectivityResult.ethernet) ||
+          connectivityResult.contains(ConnectivityResult.other);
+      
+      if (hasConnection) {
+        debugPrint('Network interface detected: $connectivityResult');
+        // If we have a network interface, assume we're online
+        // The actual sync operations will handle real connectivity errors
+        return true;
+      }
+      
+      debugPrint('No network interface detected');
+      return false;
     } catch (e) {
+      debugPrint('Connectivity check error: $e');
+      // If connectivity check fails, assume we're offline
       return false;
     }
   }
@@ -28,20 +45,36 @@ class SyncService {
   }
 
   /// Sync all pending changes to Supabase
-  Future<bool> syncToSupabase() async {
-    if (!await isOnline()) {
-      return false;
+  Future<Map<String, dynamic>> syncToSupabase() async {
+    String? errorMessage;
+    
+    if (!SupabaseConfig.isInitialized) {
+      return {'success': false, 'error': 'Supabase not initialized'};
     }
 
-    if (!SupabaseConfig.isInitialized) {
-      return false;
+    final client = SupabaseConfig.client;
+    
+    // Check authentication
+    if (client.auth.currentUser == null) {
+      return {'success': false, 'error': 'User not authenticated. Please log in again.'};
+    }
+    
+    // Check connectivity (but don't fail if check fails - let actual operations handle errors)
+    final onlineCheck = await isOnline();
+    if (!onlineCheck) {
+      debugPrint('Connectivity check suggests offline, but attempting sync anyway...');
+      // Continue anyway - the actual Supabase operations will fail if truly offline
     }
 
     try {
-      final client = SupabaseConfig.client;
 
       // Sync new/updated projects
       final projectsToSync = await _dbHelper.getProjectsNeedingSync();
+      debugPrint('Syncing ${projectsToSync.length} projects to Supabase...');
+      
+      int projectsSynced = 0;
+      int projectsFailed = 0;
+      
       for (final project in projectsToSync) {
         try {
           final supabaseId = project.id;
@@ -61,27 +94,39 @@ class SyncService {
 
             if (existing != null) {
               // Update existing project in Supabase
+              debugPrint('Updating project $supabaseId in Supabase...');
               await client
                   .from('projects')
                   .update(supabaseProjectMap)
                   .eq('id', supabaseId);
             } else {
               // Create new project in Supabase
+              debugPrint('Creating project $supabaseId in Supabase...');
               supabaseProjectMap['id'] = supabaseId;
               await client.from('projects').insert(supabaseProjectMap);
             }
 
             // Mark as synced
             await _dbHelper.markProjectAsSynced(project.id, supabaseId);
+            projectsSynced++;
+            debugPrint('Project $supabaseId synced successfully');
           } catch (e) {
+            projectsFailed++;
+            debugPrint('Failed to sync project ${project.id}: $e');
+            errorMessage = 'Failed to sync some projects: ${e.toString()}';
             // Continue with next project if one fails
             continue;
           }
         } catch (e) {
+          projectsFailed++;
+          debugPrint('Error processing project ${project.id}: $e');
+          errorMessage = 'Error processing projects: ${e.toString()}';
           // Continue with next project if one fails
           continue;
         }
       }
+      
+      debugPrint('Projects sync completed: $projectsSynced synced, $projectsFailed failed');
 
       // Sync deleted projects
       final deletedProjects = await _dbHelper.getDeletedProjectsNeedingSync();
@@ -107,6 +152,11 @@ class SyncService {
 
       // Sync new/updated milestones
       final milestonesToSync = await _dbHelper.getMilestonesNeedingSync();
+      debugPrint('Syncing ${milestonesToSync.length} milestones to Supabase...');
+      
+      int milestonesSynced = 0;
+      int milestonesFailed = 0;
+      
       for (final milestone in milestonesToSync) {
         try {
           final supabaseId = milestone.id;
@@ -126,27 +176,43 @@ class SyncService {
 
             if (existing != null) {
               // Update existing milestone in Supabase
+              debugPrint('Updating milestone $supabaseId in Supabase...');
               await client
                   .from('milestones')
                   .update(supabaseMilestoneMap)
                   .eq('id', supabaseId);
             } else {
               // Create new milestone in Supabase
+              debugPrint('Creating milestone $supabaseId in Supabase...');
               supabaseMilestoneMap['id'] = supabaseId;
               await client.from('milestones').insert(supabaseMilestoneMap);
             }
 
             // Mark as synced
             await _dbHelper.markMilestoneAsSynced(milestone.id, supabaseId);
+            milestonesSynced++;
+            debugPrint('Milestone $supabaseId synced successfully');
           } catch (e) {
+            milestonesFailed++;
+            debugPrint('Failed to sync milestone ${milestone.id}: $e');
+            if (errorMessage == null) {
+              errorMessage = 'Failed to sync some milestones: ${e.toString()}';
+            }
             // Continue with next milestone if one fails
             continue;
           }
         } catch (e) {
+          milestonesFailed++;
+          debugPrint('Error processing milestone ${milestone.id}: $e');
+          if (errorMessage == null) {
+            errorMessage = 'Error processing milestones: ${e.toString()}';
+          }
           // Continue with next milestone if one fails
           continue;
         }
       }
+      
+      debugPrint('Milestones sync completed: $milestonesSynced synced, $milestonesFailed failed');
 
       // Sync deleted milestones
       final deletedMilestones = await _dbHelper.getDeletedMilestonesNeedingSync();
@@ -166,25 +232,45 @@ class SyncService {
         }
       }
 
-      return true;
-    } catch (e) {
+      // Return success if at least some items were synced or if there was nothing to sync
+      if (projectsToSync.isEmpty && milestonesToSync.isEmpty) {
+        return {'success': true, 'message': 'No items to sync'};
+      }
+      
+      if (errorMessage != null) {
+        return {'success': false, 'error': errorMessage};
+      }
+      
+      return {'success': true, 'message': 'Sync completed'};
+    } catch (e, stackTrace) {
       // Sync failed
-      return false;
+      debugPrint('Sync failed with error: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return {'success': false, 'error': 'Sync failed: ${e.toString()}'};
     }
   }
 
   /// Pull data from Supabase to SQLite
-  Future<bool> syncFromSupabase() async {
-    if (!await isOnline()) {
-      return false;
+  Future<Map<String, dynamic>> syncFromSupabase() async {
+    if (!SupabaseConfig.isInitialized) {
+      return {'success': false, 'error': 'Supabase not initialized'};
     }
 
-    if (!SupabaseConfig.isInitialized) {
-      return false;
+    final client = SupabaseConfig.client;
+    
+    // Check authentication
+    if (client.auth.currentUser == null) {
+      return {'success': false, 'error': 'User not authenticated. Please log in again.'};
+    }
+    
+    // Check connectivity (but don't fail if check fails - let actual operations handle errors)
+    final onlineCheck = await isOnline();
+    if (!onlineCheck) {
+      debugPrint('Connectivity check suggests offline, but attempting sync anyway...');
+      // Continue anyway - the actual Supabase operations will fail if truly offline
     }
 
     try {
-      final client = SupabaseConfig.client;
 
       // Sync projects
       final projectsResponse = await client
@@ -328,42 +414,52 @@ class SyncService {
         }
       }
 
-      return true;
-    } catch (e) {
+      return {'success': true, 'message': 'Data synced from Supabase'};
+    } catch (e, stackTrace) {
       // Sync failed
-      return false;
+      debugPrint('Failed to sync from Supabase: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return {'success': false, 'error': 'Failed to sync from server: ${e.toString()}'};
     }
   }
 
   /// Full sync: pull from Supabase then push local changes
-  Future<bool> fullSync() async {
-    final pullSuccess = await syncFromSupabase();
-    final pushSuccess = await syncToSupabase();
-    return pullSuccess && pushSuccess;
+  Future<Map<String, dynamic>> fullSync() async {
+    debugPrint('Starting full sync...');
+    
+    final pullResult = await syncFromSupabase();
+    final pushResult = await syncToSupabase();
+    
+    debugPrint('Pull result: $pullResult');
+    debugPrint('Push result: $pushResult');
+    
+    final bothSuccess = pullResult['success'] == true && pushResult['success'] == true;
+    
+    if (bothSuccess) {
+      return {'success': true, 'message': 'Sync completed successfully'};
+    } else {
+      final errors = <String>[];
+      if (pullResult['success'] != true) {
+        errors.add('Pull: ${pullResult['error'] ?? 'Failed'}');
+      }
+      if (pushResult['success'] != true) {
+        errors.add('Push: ${pushResult['error'] ?? 'Failed'}');
+      }
+      return {'success': false, 'error': errors.join('; ')};
+    }
   }
 
   /// Initial sync for fresh install: fetch all data from Supabase
   /// This should be called when the database is empty and user is logged in
-  Future<bool> initialSyncFromSupabase() async {
-    if (!await isOnline()) {
-      return false;
-    }
-
+  Future<Map<String, dynamic>> initialSyncFromSupabase() async {
     if (!SupabaseConfig.isInitialized) {
-      return false;
+      return {'success': false, 'error': 'Supabase not initialized'};
     }
 
     // Check if user is authenticated
     final client = SupabaseConfig.client;
     if (client.auth.currentUser == null) {
-      return false;
-    }
-
-    // Check if database is empty (fresh install)
-    final isEmpty = await _dbHelper.isEmpty();
-    if (!isEmpty) {
-      // Database already has data, use regular sync
-      return await syncFromSupabase();
+      return {'success': false, 'error': 'User not authenticated'};
     }
 
     // Use regular sync which handles both insert and update

@@ -119,11 +119,21 @@ class DatabaseHelper {
   // Projects CRUD operations
   Future<int> insertProject(ProjectModel project, {bool needsSync = true}) async {
     final db = await database;
-    final map = project.toJson();
-    map['supabaseId'] = project.id; // Use project id as supabase id initially
-    map['isSynced'] = 0;
-    map['needsSync'] = needsSync ? 1 : 0;
-    map['deleted'] = 0;
+    // Convert to database format (camelCase)
+    final map = {
+      'id': project.id,
+      'address': project.address,
+      'homeownerId': project.homeownerId,
+      'roofingCompanyId': project.roofingCompanyId,
+      'assessDirectId': project.assessDirectId,
+      'status': project.status,
+      'createdAt': project.createdAt?.toIso8601String(),
+      'updatedAt': project.updatedAt?.toIso8601String(),
+      'supabaseId': project.id, // Use project id as supabase id initially
+      'isSynced': 0,
+      'needsSync': needsSync ? 1 : 0,
+      'deleted': 0,
+    };
     return await db.insert('projects', map);
   }
 
@@ -167,7 +177,6 @@ class DatabaseHelper {
 
   Future<int> updateProject(ProjectModel project) async {
     final db = await database;
-    final map = project.toJson();
     // Preserve sync fields
     final existing = await db.query(
       'projects',
@@ -175,6 +184,20 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [project.id],
     );
+    
+    // Convert to database format (camelCase)
+    final map = {
+      'id': project.id,
+      'address': project.address,
+      'homeownerId': project.homeownerId,
+      'roofingCompanyId': project.roofingCompanyId,
+      'assessDirectId': project.assessDirectId,
+      'status': project.status,
+      'createdAt': project.createdAt?.toIso8601String(),
+      'updatedAt': project.updatedAt?.toIso8601String(),
+      'deleted': 0,
+    };
+    
     if (existing.isNotEmpty) {
       map['supabaseId'] = existing.first['supabaseId'] ?? project.id;
       map['isSynced'] = existing.first['isSynced'] ?? 0;
@@ -185,7 +208,7 @@ class DatabaseHelper {
       map['isSynced'] = 0;
       map['needsSync'] = 1;
     }
-    map['deleted'] = 0;
+    
     return await db.update(
       'projects',
       map,
@@ -242,11 +265,22 @@ class DatabaseHelper {
   // Milestones CRUD operations
   Future<int> insertMilestone(MilestoneModel milestone, {bool needsSync = true}) async {
     final db = await database;
-    final map = milestone.toJson();
-    map['supabaseId'] = milestone.id;
-    map['isSynced'] = 0;
-    map['needsSync'] = needsSync ? 1 : 0;
-    map['deleted'] = 0;
+    // Convert to database format (camelCase)
+    final map = {
+      'id': milestone.id,
+      'projectId': milestone.projectId,
+      'name': milestone.name,
+      'description': milestone.description,
+      'status': milestone.status,
+      'dueDate': milestone.dueDate?.toIso8601String(),
+      'completedAt': milestone.completedAt?.toIso8601String(),
+      'createdAt': milestone.createdAt?.toIso8601String(),
+      'updatedAt': milestone.updatedAt?.toIso8601String(),
+      'supabaseId': milestone.id,
+      'isSynced': 0,
+      'needsSync': needsSync ? 1 : 0,
+      'deleted': 0,
+    };
     return await db.insert('milestones', map);
   }
 
@@ -301,7 +335,6 @@ class DatabaseHelper {
 
   Future<int> updateMilestone(MilestoneModel milestone) async {
     final db = await database;
-    final map = milestone.toJson();
     // Preserve sync fields
     final existing = await db.query(
       'milestones',
@@ -309,6 +342,21 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [milestone.id],
     );
+    
+    // Convert to database format (camelCase)
+    final map = {
+      'id': milestone.id,
+      'projectId': milestone.projectId,
+      'name': milestone.name,
+      'description': milestone.description,
+      'status': milestone.status,
+      'dueDate': milestone.dueDate?.toIso8601String(),
+      'completedAt': milestone.completedAt?.toIso8601String(),
+      'createdAt': milestone.createdAt?.toIso8601String(),
+      'updatedAt': milestone.updatedAt?.toIso8601String(),
+      'deleted': 0,
+    };
+    
     if (existing.isNotEmpty) {
       map['supabaseId'] = existing.first['supabaseId'] ?? milestone.id;
       map['isSynced'] = existing.first['isSynced'] ?? 0;
@@ -319,7 +367,7 @@ class DatabaseHelper {
       map['isSynced'] = 0;
       map['needsSync'] = 1;
     }
-    map['deleted'] = 0;
+    
     return await db.update(
       'milestones',
       map,
