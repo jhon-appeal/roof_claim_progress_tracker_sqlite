@@ -220,6 +220,16 @@ class DatabaseHelper {
     return null;
   }
 
+  // Check if database is empty (fresh install)
+  Future<bool> isEmpty() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM claims WHERE deleted = 0',
+    );
+    final count = result.first['count'] as int? ?? 0;
+    return count == 0;
+  }
+
   Future<void> close() async {
     final db = await database;
     await db.close();

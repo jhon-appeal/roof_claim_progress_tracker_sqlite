@@ -22,6 +22,11 @@ class SyncService {
     }
   }
 
+  /// Check if database is empty (fresh install)
+  Future<bool> isDatabaseEmpty() async {
+    return await _dbHelper.isEmpty();
+  }
+
   /// Sync all pending changes to Supabase
   Future<void> syncToSupabase() async {
     if (!await isOnline()) {
@@ -220,5 +225,75 @@ class SyncService {
   Future<void> fullSync() async {
     await syncFromSupabase();
     await syncToSupabase();
+  }
+
+  /// Initial sync for fresh install: fetch all data from Supabase
+  /// This should be called when the database is empty and user is logged in
+  Future<bool> initialSyncFromSupabase() async {
+    if (!await isOnline()) {
+      return false;
+    }
+
+    if (!SupabaseConfig.isInitialized) {
+      return false;
+    }
+
+    // Check if user is authenticated
+    final client = SupabaseConfig.client;
+    if (client.auth.currentUser == null) {
+      return false;
+    }
+
+    // Check if database is empty (fresh install)
+    final isEmpty = await _dbHelper.isEmpty();
+    if (!isEmpty) {
+      // Database already has data, use regular sync
+      await syncFromSupabase();
+      return true;
+    }
+
+    try {
+      final response = await client
+          .from('claims')
+          .select()
+          .order('updated_at', ascending: false);
+
+      if (response == null) return false;
+
+      final claims = (response as List).map((json) {
+        return {
+          'supabaseId': json['id'] as String?,
+          'homeownerName': json['homeowner_name'] as String? ?? '',
+          'address': json['address'] as String? ?? '',
+          'phoneNumber': json['phone_number'] as String? ?? '',
+          'insuranceCompany': json['insurance_company'] as String? ?? '',
+          'claimNumber': json['claim_number'] as String? ?? '',
+          'status': json['status'] as String? ?? '',
+          'notes': json['notes'] as String? ?? '',
+          'createdAt': json['created_at'] as String? ?? '',
+          'updatedAt': json['updated_at'] as String? ?? '',
+        };
+      }).toList();
+
+      final db = await _dbHelper.database;
+
+      // Insert all claims from Supabase
+      for (final claimData in claims) {
+        final supabaseId = claimData['supabaseId'] as String?;
+        if (supabaseId == null) continue;
+
+        await db.insert('claims', {
+          ...claimData,
+          'isSynced': 1,
+          'needsSync': 0,
+          'deleted': 0,
+        });
+      }
+
+      return true;
+    } catch (e) {
+      // Initial sync failed
+      return false;
+    }
   }
 }

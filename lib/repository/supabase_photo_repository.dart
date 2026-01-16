@@ -1,5 +1,9 @@
+import 'dart:io';
+import 'package:path/path.dart' as path;
 import 'package:roof_claim_progress_tracker_sqlite/config/supabase_config.dart';
+import 'package:roof_claim_progress_tracker_sqlite/core/utils/constants.dart';
 import 'package:roof_claim_progress_tracker_sqlite/models/supabase_models.dart';
+import 'package:roof_claim_progress_tracker_sqlite/shared/services/supabase_service.dart';
 
 /// Repository for Supabase progress photos operations
 class SupabasePhotoRepository {
@@ -43,16 +47,32 @@ class SupabasePhotoRepository {
   Future<ProgressPhoto> uploadPhoto({
     required String milestoneId,
     required String projectId,
-    required String storagePath,
-    required String uploadedBy,
+    required String imagePath,
     String? description,
   }) async {
     try {
+      final userId = SupabaseService.currentUserId;
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // Create storage path: {project_id}/{milestone_id}/{timestamp}_{filename}
+      final fileName = path.basename(imagePath);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final storagePath = '$projectId/$milestoneId/${timestamp}_$fileName';
+
+      // Upload file to storage
+      final file = File(imagePath);
+      await _supabase.storage
+          .from(AppConstants.storageBucket)
+          .upload(storagePath, file);
+
+      // Create record in database
       final photo = ProgressPhoto(
         milestoneId: milestoneId,
         projectId: projectId,
         storagePath: storagePath,
-        uploadedBy: uploadedBy,
+        uploadedBy: userId,
         description: description,
       );
 

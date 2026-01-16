@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:roof_claim_progress_tracker_sqlite/config/supabase_config.dart';
 import 'package:roof_claim_progress_tracker_sqlite/core/router/app_router.dart';
+import 'package:roof_claim_progress_tracker_sqlite/core/theme/app_theme.dart';
 import 'package:roof_claim_progress_tracker_sqlite/viewmodels/auth_viewmodel.dart';
 
 void main() async {
@@ -32,19 +33,7 @@ class MyApp extends StatelessWidget {
       child: MaterialApp.router(
         title: 'Roof Claim Progress Tracker',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blue,
-            brightness: Brightness.light,
-          ),
-          useMaterial3: true,
-          cardTheme: CardThemeData(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
+        theme: AppTheme.lightTheme,
         routerConfig: AppRouter.router,
       ),
     );
