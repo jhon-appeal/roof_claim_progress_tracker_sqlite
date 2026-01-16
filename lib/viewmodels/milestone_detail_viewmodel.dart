@@ -204,10 +204,18 @@ class MilestoneDetailViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (_milestone == null) {
+        _errorMessage = 'Milestone not loaded';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
       await _photoRepository.uploadPhoto(
         milestoneId: milestoneId,
         projectId: projectId,
         imagePath: imagePath,
+        milestoneName: _milestone!.name,
         description: description,
       );
       await loadPhotos(milestoneId);
