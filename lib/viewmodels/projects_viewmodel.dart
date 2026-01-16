@@ -1,13 +1,17 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:roof_claim_progress_tracker_sqlite/database/database_helper.dart';
 import 'package:roof_claim_progress_tracker_sqlite/models/supabase_models.dart';
 import 'package:roof_claim_progress_tracker_sqlite/repository/supabase_project_repository.dart';
+import 'package:roof_claim_progress_tracker_sqlite/repository/supabase_milestone_repository.dart';
 import 'package:roof_claim_progress_tracker_sqlite/services/auth_service.dart';
 import 'package:roof_claim_progress_tracker_sqlite/shared/models/project_model.dart';
+import 'package:roof_claim_progress_tracker_sqlite/shared/models/milestone_model.dart';
 
 class ProjectsViewModel extends ChangeNotifier {
   final SupabaseProjectRepository _projectRepository = SupabaseProjectRepository();
+  final SupabaseMilestoneRepository _milestoneRepository = SupabaseMilestoneRepository();
   final AuthService _authService = AuthService();
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   final Connectivity _connectivity = Connectivity();
@@ -63,6 +67,51 @@ class ProjectsViewModel extends ChangeNotifier {
                 debugPrint('Error stack: ${saveError.toString()}');
                 // Continue with next project if one fails to save
               }
+            }
+            
+            // Download milestones for all projects
+            debugPrint('Downloading milestones for all projects...');
+            try {
+              for (final project in _projects) {
+                try {
+                  // Download milestones for this project from Supabase (with timeout)
+                  final supabaseMilestones = await _milestoneRepository.getMilestonesByProject(project.id).timeout(
+                    const Duration(seconds: 10),
+                    onTimeout: () {
+                      debugPrint('Timeout loading milestones for project ${project.id}');
+                      throw TimeoutException('Loading milestones timed out');
+                    },
+                  );
+                  final milestones = supabaseMilestones.map((m) => MilestoneModel.fromJson(m.toMap())).toList();
+                  debugPrint('Loaded ${milestones.length} milestones for project ${project.id}');
+                  
+                  // Save milestones to SQLite
+                  for (final milestone in milestones) {
+                    try {
+                      final existing = await _dbHelper.getMilestone(milestone.id);
+                      if (existing == null) {
+                        await _dbHelper.insertMilestone(milestone, needsSync: false);
+                        await _dbHelper.markMilestoneAsSynced(milestone.id, milestone.id);
+                        debugPrint('Milestone saved to SQLite (inserted): ${milestone.id}');
+                      } else {
+                        await _dbHelper.updateMilestone(milestone);
+                        await _dbHelper.markMilestoneAsSynced(milestone.id, milestone.id);
+                        debugPrint('Milestone saved to SQLite (updated): ${milestone.id}');
+                      }
+                    } catch (milestoneSaveError) {
+                      debugPrint('Failed to save milestone ${milestone.id} to SQLite: $milestoneSaveError');
+                      // Continue with next milestone
+                    }
+                  }
+                } catch (milestoneError) {
+                  debugPrint('Failed to load milestones for project ${project.id}: $milestoneError');
+                  // Continue with next project if milestones fail to load
+                }
+              }
+              debugPrint('Finished downloading milestones for all projects');
+            } catch (milestonesError) {
+              debugPrint('Failed to download milestones: $milestonesError');
+              // Don't fail the entire load if milestones fail
             }
           } catch (dbError) {
             // SQLite save failed, but we still have projects from Supabase to show
