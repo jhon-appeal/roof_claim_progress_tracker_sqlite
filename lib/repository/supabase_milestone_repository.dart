@@ -14,7 +14,7 @@ class SupabaseMilestoneRepository {
           .eq('project_id', projectId)
           .order('created_at', ascending: true);
 
-      return (response as List)
+      return (response as List<dynamic>)
           .map((json) => Milestone.fromMap(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
@@ -29,10 +29,10 @@ class SupabaseMilestoneRepository {
           .from('milestones')
           .select()
           .eq('id', id)
-          .single();
+          .maybeSingle();
 
       if (response == null) return null;
-      return Milestone.fromMap(response as Map<String, dynamic>);
+      return Milestone.fromMap(response);
     } catch (e) {
       throw Exception('Failed to fetch milestone: $e');
     }
@@ -47,7 +47,7 @@ class SupabaseMilestoneRepository {
           .select()
           .single();
 
-      return Milestone.fromMap(response as Map<String, dynamic>);
+      return Milestone.fromMap(response);
     } catch (e) {
       throw Exception('Failed to create milestone: $e');
     }
@@ -63,7 +63,7 @@ class SupabaseMilestoneRepository {
           .select()
           .single();
 
-      return Milestone.fromMap(response as Map<String, dynamic>);
+      return Milestone.fromMap(response);
     } catch (e) {
       throw Exception('Failed to update milestone: $e');
     }

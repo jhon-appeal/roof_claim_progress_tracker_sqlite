@@ -13,7 +13,7 @@ class SupabaseProjectRepository {
           .select()
           .order('updated_at', ascending: false);
 
-      return (response as List)
+      return (response as List<dynamic>)
           .map((json) => Project.fromMap(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
@@ -28,10 +28,10 @@ class SupabaseProjectRepository {
           .from('projects')
           .select()
           .eq('id', id)
-          .single();
+          .maybeSingle();
 
       if (response == null) return null;
-      return Project.fromMap(response as Map<String, dynamic>);
+      return Project.fromMap(response);
     } catch (e) {
       throw Exception('Failed to fetch project: $e');
     }
@@ -46,7 +46,7 @@ class SupabaseProjectRepository {
           .eq('homeowner_id', homeownerId)
           .order('updated_at', ascending: false);
 
-      return (response as List)
+      return (response as List<dynamic>)
           .map((json) => Project.fromMap(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
@@ -63,7 +63,7 @@ class SupabaseProjectRepository {
           .select()
           .single();
 
-      return Project.fromMap(response as Map<String, dynamic>);
+      return Project.fromMap(response);
     } catch (e) {
       throw Exception('Failed to create project: $e');
     }
@@ -79,7 +79,7 @@ class SupabaseProjectRepository {
           .select()
           .single();
 
-      return Project.fromMap(response as Map<String, dynamic>);
+      return Project.fromMap(response);
     } catch (e) {
       throw Exception('Failed to update project: $e');
     }
@@ -123,7 +123,7 @@ class SupabaseProjectRepository {
 
       await _supabase.from('status_history').insert(statusHistory.toMap());
 
-      return Project.fromMap(projectResponse as Map<String, dynamic>);
+      return Project.fromMap(projectResponse);
     } catch (e) {
       throw Exception('Failed to update project status: $e');
     }

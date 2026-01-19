@@ -16,20 +16,21 @@ class SyncService {
     try {
       final connectivityResult = await _connectivity.checkConnectivity();
       debugPrint('Connectivity result: $connectivityResult');
-      
+
       // Check for any active network connection
-      final hasConnection = connectivityResult.contains(ConnectivityResult.mobile) ||
+      final hasConnection =
+          connectivityResult.contains(ConnectivityResult.mobile) ||
           connectivityResult.contains(ConnectivityResult.wifi) ||
           connectivityResult.contains(ConnectivityResult.ethernet) ||
           connectivityResult.contains(ConnectivityResult.other);
-      
+
       if (hasConnection) {
         debugPrint('Network interface detected: $connectivityResult');
         // If we have a network interface, assume we're online
         // The actual sync operations will handle real connectivity errors
         return true;
       }
-      
+
       debugPrint('No network interface detected');
       return false;
     } catch (e) {
@@ -47,34 +48,38 @@ class SyncService {
   /// Sync all pending changes to Supabase
   Future<Map<String, dynamic>> syncToSupabase() async {
     String? errorMessage;
-    
+
     if (!SupabaseConfig.isInitialized) {
       return {'success': false, 'error': 'Supabase not initialized'};
     }
 
     final client = SupabaseConfig.client;
-    
+
     // Check authentication
     if (client.auth.currentUser == null) {
-      return {'success': false, 'error': 'User not authenticated. Please log in again.'};
+      return {
+        'success': false,
+        'error': 'User not authenticated. Please log in again.',
+      };
     }
-    
+
     // Check connectivity (but don't fail if check fails - let actual operations handle errors)
     final onlineCheck = await isOnline();
     if (!onlineCheck) {
-      debugPrint('Connectivity check suggests offline, but attempting sync anyway...');
+      debugPrint(
+        'Connectivity check suggests offline, but attempting sync anyway...',
+      );
       // Continue anyway - the actual Supabase operations will fail if truly offline
     }
 
     try {
-
       // Sync new/updated projects
       final projectsToSync = await _dbHelper.getProjectsNeedingSync();
       debugPrint('Syncing ${projectsToSync.length} projects to Supabase...');
-      
+
       int projectsSynced = 0;
       int projectsFailed = 0;
-      
+
       for (final project in projectsToSync) {
         try {
           final supabaseId = project.id;
@@ -125,8 +130,10 @@ class SyncService {
           continue;
         }
       }
-      
-      debugPrint('Projects sync completed: $projectsSynced synced, $projectsFailed failed');
+
+      debugPrint(
+        'Projects sync completed: $projectsSynced synced, $projectsFailed failed',
+      );
 
       // Sync deleted projects
       final deletedProjects = await _dbHelper.getDeletedProjectsNeedingSync();
@@ -152,11 +159,13 @@ class SyncService {
 
       // Sync new/updated milestones
       final milestonesToSync = await _dbHelper.getMilestonesNeedingSync();
-      debugPrint('Syncing ${milestonesToSync.length} milestones to Supabase...');
-      
+      debugPrint(
+        'Syncing ${milestonesToSync.length} milestones to Supabase...',
+      );
+
       int milestonesSynced = 0;
       int milestonesFailed = 0;
-      
+
       for (final milestone in milestonesToSync) {
         try {
           final supabaseId = milestone.id;
@@ -211,11 +220,14 @@ class SyncService {
           continue;
         }
       }
-      
-      debugPrint('Milestones sync completed: $milestonesSynced synced, $milestonesFailed failed');
+
+      debugPrint(
+        'Milestones sync completed: $milestonesSynced synced, $milestonesFailed failed',
+      );
 
       // Sync deleted milestones
-      final deletedMilestones = await _dbHelper.getDeletedMilestonesNeedingSync();
+      final deletedMilestones = await _dbHelper
+          .getDeletedMilestonesNeedingSync();
       for (final milestone in deletedMilestones) {
         try {
           final supabaseId = milestone.id;
@@ -225,7 +237,11 @@ class SyncService {
 
           // Remove from local database after successful sync
           final db = await _dbHelper.database;
-          await db.delete('milestones', where: 'id = ?', whereArgs: [milestone.id]);
+          await db.delete(
+            'milestones',
+            where: 'id = ?',
+            whereArgs: [milestone.id],
+          );
         } catch (e) {
           // Continue with next milestone if one fails
           continue;
@@ -236,11 +252,11 @@ class SyncService {
       if (projectsToSync.isEmpty && milestonesToSync.isEmpty) {
         return {'success': true, 'message': 'No items to sync'};
       }
-      
+
       if (errorMessage != null) {
         return {'success': false, 'error': errorMessage};
       }
-      
+
       return {'success': true, 'message': 'Sync completed'};
     } catch (e, stackTrace) {
       // Sync failed
@@ -257,86 +273,92 @@ class SyncService {
     }
 
     final client = SupabaseConfig.client;
-    
+
     // Check authentication
     if (client.auth.currentUser == null) {
-      return {'success': false, 'error': 'User not authenticated. Please log in again.'};
+      return {
+        'success': false,
+        'error': 'User not authenticated. Please log in again.',
+      };
     }
-    
+
     // Check connectivity (but don't fail if check fails - let actual operations handle errors)
     final onlineCheck = await isOnline();
     if (!onlineCheck) {
-      debugPrint('Connectivity check suggests offline, but attempting sync anyway...');
+      debugPrint(
+        'Connectivity check suggests offline, but attempting sync anyway...',
+      );
       // Continue anyway - the actual Supabase operations will fail if truly offline
     }
 
     try {
-
       // Sync projects
       final projectsResponse = await client
           .from('projects')
           .select()
           .order('updated_at', ascending: false);
 
-      if (projectsResponse != null) {
-        final projects = (projectsResponse as List)
-            .map((json) => Project.fromMap(json as Map<String, dynamic>))
-            .toList();
+      final projects = (projectsResponse as List<dynamic>)
+          .map((json) => Project.fromMap(json as Map<String, dynamic>))
+          .toList();
 
-        for (final supabaseProject in projects) {
-          final supabaseId = supabaseProject.id;
+      for (final supabaseProject in projects) {
+        final supabaseId = supabaseProject.id;
 
-          // Check if project already exists locally
-          final existingProject = await _dbHelper.getProjectBySupabaseId(supabaseId);
+        // Check if project already exists locally
+        final existingProject = await _dbHelper.getProjectBySupabaseId(
+          supabaseId,
+        );
 
-          if (existingProject == null) {
-            // Insert new project
-            final projectModel = ProjectModel(
-              id: supabaseProject.id,
-              address: supabaseProject.address,
-              homeownerId: supabaseProject.homeownerId,
-              roofingCompanyId: supabaseProject.roofingCompanyId,
-              assessDirectId: supabaseProject.assessDirectId,
-              status: supabaseProject.status.toSupabaseValue(),
-              createdAt: supabaseProject.createdAt,
-              updatedAt: supabaseProject.updatedAt,
+        if (existingProject == null) {
+          // Insert new project
+          final projectModel = ProjectModel(
+            id: supabaseProject.id,
+            address: supabaseProject.address,
+            homeownerId: supabaseProject.homeownerId,
+            roofingCompanyId: supabaseProject.roofingCompanyId,
+            assessDirectId: supabaseProject.assessDirectId,
+            status: supabaseProject.status.toSupabaseValue(),
+            createdAt: supabaseProject.createdAt,
+            updatedAt: supabaseProject.updatedAt,
+          );
+          await _dbHelper.insertProject(projectModel, needsSync: false);
+          await _dbHelper.markProjectAsSynced(projectModel.id, supabaseId);
+        } else {
+          // Update existing project if Supabase version is newer
+          final localUpdatedAt =
+              existingProject.updatedAt ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final supabaseUpdatedAt = supabaseProject.updatedAt;
+
+          if (supabaseUpdatedAt.isAfter(localUpdatedAt) ||
+              supabaseUpdatedAt.isAtSameMomentAs(localUpdatedAt)) {
+            // Only update if local doesn't have unsynced changes
+            final db = await _dbHelper.database;
+            final result = await db.query(
+              'projects',
+              columns: ['needsSync'],
+              where: 'id = ?',
+              whereArgs: [existingProject.id],
             );
-            await _dbHelper.insertProject(projectModel, needsSync: false);
-            await _dbHelper.markProjectAsSynced(projectModel.id, supabaseId);
-          } else {
-            // Update existing project if Supabase version is newer
-            final localUpdatedAt = existingProject.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-            final supabaseUpdatedAt = supabaseProject.updatedAt;
+            final needsSync = result.isNotEmpty
+                ? (result.first['needsSync'] as int? ?? 0) == 1
+                : false;
 
-            if (supabaseUpdatedAt.isAfter(localUpdatedAt) ||
-                supabaseUpdatedAt.isAtSameMomentAs(localUpdatedAt)) {
-              // Only update if local doesn't have unsynced changes
-              final db = await _dbHelper.database;
-              final result = await db.query(
-                'projects',
-                columns: ['needsSync'],
-                where: 'id = ?',
-                whereArgs: [existingProject.id],
+            if (!needsSync) {
+              final projectModel = ProjectModel(
+                id: supabaseProject.id,
+                address: supabaseProject.address,
+                homeownerId: supabaseProject.homeownerId,
+                roofingCompanyId: supabaseProject.roofingCompanyId,
+                assessDirectId: supabaseProject.assessDirectId,
+                status: supabaseProject.status.toSupabaseValue(),
+                createdAt: supabaseProject.createdAt,
+                updatedAt: supabaseProject.updatedAt,
               );
-              final needsSync = result.isNotEmpty
-                  ? (result.first['needsSync'] as int? ?? 0) == 1
-                  : false;
-
-              if (!needsSync) {
-                final projectModel = ProjectModel(
-                  id: supabaseProject.id,
-                  address: supabaseProject.address,
-                  homeownerId: supabaseProject.homeownerId,
-                  roofingCompanyId: supabaseProject.roofingCompanyId,
-                  assessDirectId: supabaseProject.assessDirectId,
-                  status: supabaseProject.status.toSupabaseValue(),
-                  createdAt: supabaseProject.createdAt,
-                  updatedAt: supabaseProject.updatedAt,
-                );
-                await _dbHelper.updateProject(projectModel);
-                // Mark as synced after update
-                await _dbHelper.markProjectAsSynced(projectModel.id, supabaseId);
-              }
+              await _dbHelper.updateProject(projectModel);
+              // Mark as synced after update
+              await _dbHelper.markProjectAsSynced(projectModel.id, supabaseId);
             }
           }
         }
@@ -348,67 +370,72 @@ class SyncService {
           .select()
           .order('updated_at', ascending: false);
 
-      if (milestonesResponse != null) {
-        final milestones = (milestonesResponse as List)
-            .map((json) => Milestone.fromMap(json as Map<String, dynamic>))
-            .toList();
+      final milestones = (milestonesResponse as List<dynamic>)
+          .map((json) => Milestone.fromMap(json as Map<String, dynamic>))
+          .toList();
 
-        for (final supabaseMilestone in milestones) {
-          final supabaseId = supabaseMilestone.id;
+      for (final supabaseMilestone in milestones) {
+        final supabaseId = supabaseMilestone.id;
 
-          // Check if milestone already exists locally
-          final existingMilestone = await _dbHelper.getMilestoneBySupabaseId(supabaseId);
+        // Check if milestone already exists locally
+        final existingMilestone = await _dbHelper.getMilestoneBySupabaseId(
+          supabaseId,
+        );
 
-          if (existingMilestone == null) {
-            // Insert new milestone
-            final milestoneModel = MilestoneModel(
-              id: supabaseMilestone.id,
-              projectId: supabaseMilestone.projectId,
-              name: supabaseMilestone.name,
-              description: supabaseMilestone.description,
-              status: supabaseMilestone.status.toSupabaseValue(),
-              dueDate: supabaseMilestone.dueDate,
-              completedAt: supabaseMilestone.completedAt,
-              createdAt: supabaseMilestone.createdAt,
-              updatedAt: supabaseMilestone.updatedAt,
+        if (existingMilestone == null) {
+          // Insert new milestone
+          final milestoneModel = MilestoneModel(
+            id: supabaseMilestone.id,
+            projectId: supabaseMilestone.projectId,
+            name: supabaseMilestone.name,
+            description: supabaseMilestone.description,
+            status: supabaseMilestone.status.toSupabaseValue(),
+            dueDate: supabaseMilestone.dueDate,
+            completedAt: supabaseMilestone.completedAt,
+            createdAt: supabaseMilestone.createdAt,
+            updatedAt: supabaseMilestone.updatedAt,
+          );
+          await _dbHelper.insertMilestone(milestoneModel, needsSync: false);
+          await _dbHelper.markMilestoneAsSynced(milestoneModel.id, supabaseId);
+        } else {
+          // Update existing milestone if Supabase version is newer
+          final localUpdatedAt =
+              existingMilestone.updatedAt ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final supabaseUpdatedAt = supabaseMilestone.updatedAt;
+
+          if (supabaseUpdatedAt.isAfter(localUpdatedAt) ||
+              supabaseUpdatedAt.isAtSameMomentAs(localUpdatedAt)) {
+            // Only update if local doesn't have unsynced changes
+            final db = await _dbHelper.database;
+            final result = await db.query(
+              'milestones',
+              columns: ['needsSync'],
+              where: 'id = ?',
+              whereArgs: [existingMilestone.id],
             );
-            await _dbHelper.insertMilestone(milestoneModel, needsSync: false);
-            await _dbHelper.markMilestoneAsSynced(milestoneModel.id, supabaseId);
-          } else {
-            // Update existing milestone if Supabase version is newer
-            final localUpdatedAt = existingMilestone.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-            final supabaseUpdatedAt = supabaseMilestone.updatedAt;
+            final needsSync = result.isNotEmpty
+                ? (result.first['needsSync'] as int? ?? 0) == 1
+                : false;
 
-            if (supabaseUpdatedAt.isAfter(localUpdatedAt) ||
-                supabaseUpdatedAt.isAtSameMomentAs(localUpdatedAt)) {
-              // Only update if local doesn't have unsynced changes
-              final db = await _dbHelper.database;
-              final result = await db.query(
-                'milestones',
-                columns: ['needsSync'],
-                where: 'id = ?',
-                whereArgs: [existingMilestone.id],
+            if (!needsSync) {
+              final milestoneModel = MilestoneModel(
+                id: supabaseMilestone.id,
+                projectId: supabaseMilestone.projectId,
+                name: supabaseMilestone.name,
+                description: supabaseMilestone.description,
+                status: supabaseMilestone.status.toSupabaseValue(),
+                dueDate: supabaseMilestone.dueDate,
+                completedAt: supabaseMilestone.completedAt,
+                createdAt: supabaseMilestone.createdAt,
+                updatedAt: supabaseMilestone.updatedAt,
               );
-              final needsSync = result.isNotEmpty
-                  ? (result.first['needsSync'] as int? ?? 0) == 1
-                  : false;
-
-              if (!needsSync) {
-                final milestoneModel = MilestoneModel(
-                  id: supabaseMilestone.id,
-                  projectId: supabaseMilestone.projectId,
-                  name: supabaseMilestone.name,
-                  description: supabaseMilestone.description,
-                  status: supabaseMilestone.status.toSupabaseValue(),
-                  dueDate: supabaseMilestone.dueDate,
-                  completedAt: supabaseMilestone.completedAt,
-                  createdAt: supabaseMilestone.createdAt,
-                  updatedAt: supabaseMilestone.updatedAt,
-                );
-                await _dbHelper.updateMilestone(milestoneModel);
-                // Mark as synced after update
-                await _dbHelper.markMilestoneAsSynced(milestoneModel.id, supabaseId);
-              }
+              await _dbHelper.updateMilestone(milestoneModel);
+              // Mark as synced after update
+              await _dbHelper.markMilestoneAsSynced(
+                milestoneModel.id,
+                supabaseId,
+              );
             }
           }
         }
@@ -419,22 +446,26 @@ class SyncService {
       // Sync failed
       debugPrint('Failed to sync from Supabase: $e');
       debugPrint('Stack trace: $stackTrace');
-      return {'success': false, 'error': 'Failed to sync from server: ${e.toString()}'};
+      return {
+        'success': false,
+        'error': 'Failed to sync from server: ${e.toString()}',
+      };
     }
   }
 
   /// Full sync: pull from Supabase then push local changes
   Future<Map<String, dynamic>> fullSync() async {
     debugPrint('Starting full sync...');
-    
+
     final pullResult = await syncFromSupabase();
     final pushResult = await syncToSupabase();
-    
+
     debugPrint('Pull result: $pullResult');
     debugPrint('Push result: $pushResult');
-    
-    final bothSuccess = pullResult['success'] == true && pushResult['success'] == true;
-    
+
+    final bothSuccess =
+        pullResult['success'] == true && pushResult['success'] == true;
+
     if (bothSuccess) {
       return {'success': true, 'message': 'Sync completed successfully'};
     } else {

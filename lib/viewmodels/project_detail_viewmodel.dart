@@ -11,8 +11,10 @@ import 'package:roof_claim_progress_tracker_sqlite/shared/models/milestone_model
 import 'package:roof_claim_progress_tracker_sqlite/shared/models/project_model.dart';
 
 class ProjectDetailViewModel extends ChangeNotifier {
-  final SupabaseProjectRepository _projectRepository = SupabaseProjectRepository();
-  final SupabaseMilestoneRepository _milestoneRepository = SupabaseMilestoneRepository();
+  final SupabaseProjectRepository _projectRepository =
+      SupabaseProjectRepository();
+  final SupabaseMilestoneRepository _milestoneRepository =
+      SupabaseMilestoneRepository();
   final AuthService _authService = AuthService();
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   final Connectivity _connectivity = Connectivity();
@@ -49,7 +51,8 @@ class ProjectDetailViewModel extends ChangeNotifier {
     try {
       // Check connectivity
       final connectivityResult = await _connectivity.checkConnectivity();
-      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+      final isOnline =
+          connectivityResult.contains(ConnectivityResult.mobile) ||
           connectivityResult.contains(ConnectivityResult.wifi) ||
           connectivityResult.contains(ConnectivityResult.ethernet);
 
@@ -59,33 +62,39 @@ class ProjectDetailViewModel extends ChangeNotifier {
         try {
           // Try to load from Supabase first (with timeout)
           debugPrint('Loading project $projectId from Supabase...');
-          final supabaseProject = await _projectRepository.getProject(projectId).timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              debugPrint('Timeout loading project from Supabase');
-              throw TimeoutException('Loading project timed out');
-            },
-          );
-          
+          final supabaseProject = await _projectRepository
+              .getProject(projectId)
+              .timeout(
+                const Duration(seconds: 10),
+                onTimeout: () {
+                  debugPrint('Timeout loading project from Supabase');
+                  throw TimeoutException('Loading project timed out');
+                },
+              );
+
           if (supabaseProject != null) {
             _project = ProjectModel.fromJson(supabaseProject.toMap());
             debugPrint('Project loaded from Supabase: ${_project!.address}');
             projectLoaded = true;
-            
+
             // Save to SQLite for offline access (don't fail if this errors)
             try {
               final existing = await _dbHelper.getProject(projectId);
               if (existing == null) {
                 await _dbHelper.insertProject(_project!, needsSync: false);
                 await _dbHelper.markProjectAsSynced(_project!.id, _project!.id);
-                debugPrint('Project saved to SQLite (inserted): ${_project!.id}');
+                debugPrint(
+                  'Project saved to SQLite (inserted): ${_project!.id}',
+                );
               } else {
                 // Update without marking as needing sync since it came from Supabase
                 // First update the project, then mark as synced
                 await _dbHelper.updateProject(_project!);
                 // Now mark as synced without needing sync
                 await _dbHelper.markProjectAsSynced(_project!.id, _project!.id);
-                debugPrint('Project saved to SQLite (updated): ${_project!.id}');
+                debugPrint(
+                  'Project saved to SQLite (updated): ${_project!.id}',
+                );
               }
             } catch (dbError) {
               debugPrint('Failed to save project to SQLite: $dbError');
@@ -134,7 +143,8 @@ class ProjectDetailViewModel extends ChangeNotifier {
       }
 
       if (!projectLoaded) {
-        _errorMessage = 'Project not found. Please ensure you have an internet connection to sync projects.';
+        _errorMessage =
+            'Project not found. Please ensure you have an internet connection to sync projects.';
       }
 
       _isLoading = false;
@@ -170,24 +180,31 @@ class ProjectDetailViewModel extends ChangeNotifier {
     try {
       // Check connectivity
       final connectivityResult = await _connectivity.checkConnectivity();
-      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+      final isOnline =
+          connectivityResult.contains(ConnectivityResult.mobile) ||
           connectivityResult.contains(ConnectivityResult.wifi) ||
           connectivityResult.contains(ConnectivityResult.ethernet);
 
       if (isOnline) {
         try {
           // Try to load from Supabase first (with timeout)
-          debugPrint('Loading milestones for project $projectId from Supabase...');
-          final supabaseMilestones = await _milestoneRepository.getMilestonesByProject(projectId).timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              debugPrint('Timeout loading milestones from Supabase');
-              throw TimeoutException('Loading milestones timed out');
-            },
+          debugPrint(
+            'Loading milestones for project $projectId from Supabase...',
           );
-          _milestones = supabaseMilestones.map((m) => MilestoneModel.fromJson(m.toMap())).toList();
+          final supabaseMilestones = await _milestoneRepository
+              .getMilestonesByProject(projectId)
+              .timeout(
+                const Duration(seconds: 10),
+                onTimeout: () {
+                  debugPrint('Timeout loading milestones from Supabase');
+                  throw TimeoutException('Loading milestones timed out');
+                },
+              );
+          _milestones = supabaseMilestones
+              .map((m) => MilestoneModel.fromJson(m.toMap()))
+              .toList();
           debugPrint('Loaded ${_milestones.length} milestones from Supabase');
-          
+
           // Save to SQLite for offline access (don't fail if this errors)
           try {
             for (final milestone in _milestones) {
@@ -195,18 +212,30 @@ class ProjectDetailViewModel extends ChangeNotifier {
                 final existing = await _dbHelper.getMilestone(milestone.id);
                 if (existing == null) {
                   await _dbHelper.insertMilestone(milestone, needsSync: false);
-                  await _dbHelper.markMilestoneAsSynced(milestone.id, milestone.id);
-                  debugPrint('Milestone saved to SQLite (inserted): ${milestone.id}');
+                  await _dbHelper.markMilestoneAsSynced(
+                    milestone.id,
+                    milestone.id,
+                  );
+                  debugPrint(
+                    'Milestone saved to SQLite (inserted): ${milestone.id}',
+                  );
                 } else {
                   // Update without marking as needing sync since it came from Supabase
                   // First update the milestone, then mark as synced
                   await _dbHelper.updateMilestone(milestone);
                   // Now mark as synced without needing sync
-                  await _dbHelper.markMilestoneAsSynced(milestone.id, milestone.id);
-                  debugPrint('Milestone saved to SQLite (updated): ${milestone.id}');
+                  await _dbHelper.markMilestoneAsSynced(
+                    milestone.id,
+                    milestone.id,
+                  );
+                  debugPrint(
+                    'Milestone saved to SQLite (updated): ${milestone.id}',
+                  );
                 }
               } catch (saveError) {
-                debugPrint('Failed to save milestone ${milestone.id} to SQLite: $saveError');
+                debugPrint(
+                  'Failed to save milestone ${milestone.id} to SQLite: $saveError',
+                );
                 debugPrint('Error type: ${saveError.runtimeType}');
                 debugPrint('Error stack: ${saveError.toString()}');
                 // Continue with next milestone
@@ -238,7 +267,9 @@ class ProjectDetailViewModel extends ChangeNotifier {
       // If everything fails, try SQLite as last resort
       try {
         _milestones = await _dbHelper.getMilestonesByProject(projectId);
-        debugPrint('Loaded ${_milestones.length} milestones from SQLite (fallback)');
+        debugPrint(
+          'Loaded ${_milestones.length} milestones from SQLite (fallback)',
+        );
         notifyListeners();
       } catch (dbError) {
         debugPrint('Failed to load milestones from SQLite: $dbError');
@@ -251,26 +282,26 @@ class ProjectDetailViewModel extends ChangeNotifier {
   /// Check if the current user can change the project status
   bool canChangeStatus() {
     if (_project == null || _currentUserRole == null) return false;
-    
+
     final currentStatus = _project!.status.toLowerCase().trim();
-    
+
     switch (_currentUserRole!) {
       case AppConstants.roleHomeowner:
         return currentStatus == AppConstants.statusCompleted.toLowerCase() ||
-               currentStatus == 'completed';
-      
+            currentStatus == 'completed';
+
       case AppConstants.roleRoofingCompany:
         return currentStatus == AppConstants.statusInspection.toLowerCase() ||
-               currentStatus == 'inspection' ||
-               currentStatus == AppConstants.statusConstruction.toLowerCase() ||
-               currentStatus == 'construction';
-      
+            currentStatus == 'inspection' ||
+            currentStatus == AppConstants.statusConstruction.toLowerCase() ||
+            currentStatus == 'construction';
+
       case AppConstants.roleAssessDirect:
         return currentStatus == AppConstants.statusClaimLodged.toLowerCase() ||
-               currentStatus == 'claim_lodged' ||
-               currentStatus == AppConstants.statusClaimApproved.toLowerCase() ||
-               currentStatus == 'claim_approved';
-      
+            currentStatus == 'claim_lodged' ||
+            currentStatus == AppConstants.statusClaimApproved.toLowerCase() ||
+            currentStatus == 'claim_approved';
+
       default:
         return false;
     }
@@ -279,10 +310,10 @@ class ProjectDetailViewModel extends ChangeNotifier {
   /// Get the list of allowed next statuses based on current role and status
   List<String> getAllowedNextStatuses() {
     if (_project == null || _currentUserRole == null) return [];
-    
+
     final currentStatus = _project!.status.toLowerCase().trim();
     final List<String> allowedStatuses = [];
-    
+
     switch (_currentUserRole!) {
       case AppConstants.roleHomeowner:
         if (currentStatus == AppConstants.statusCompleted.toLowerCase() ||
@@ -290,17 +321,18 @@ class ProjectDetailViewModel extends ChangeNotifier {
           allowedStatuses.addAll([AppConstants.statusClosed]);
         }
         break;
-      
+
       case AppConstants.roleRoofingCompany:
         if (currentStatus == AppConstants.statusInspection.toLowerCase() ||
             currentStatus == 'inspection') {
           allowedStatuses.addAll([AppConstants.statusConstruction]);
-        } else if (currentStatus == AppConstants.statusConstruction.toLowerCase() ||
-                   currentStatus == 'construction') {
+        } else if (currentStatus ==
+                AppConstants.statusConstruction.toLowerCase() ||
+            currentStatus == 'construction') {
           allowedStatuses.addAll([AppConstants.statusCompleted]);
         }
         break;
-      
+
       case AppConstants.roleAssessDirect:
         if (currentStatus == AppConstants.statusClaimLodged.toLowerCase() ||
             currentStatus == 'claim_lodged') {
@@ -308,13 +340,14 @@ class ProjectDetailViewModel extends ChangeNotifier {
             AppConstants.statusClaimApproved,
             AppConstants.statusInspection,
           ]);
-        } else if (currentStatus == AppConstants.statusClaimApproved.toLowerCase() ||
-                   currentStatus == 'claim_approved') {
+        } else if (currentStatus ==
+                AppConstants.statusClaimApproved.toLowerCase() ||
+            currentStatus == 'claim_approved') {
           allowedStatuses.addAll([AppConstants.statusInspection]);
         }
         break;
     }
-    
+
     return allowedStatuses;
   }
 
@@ -322,7 +355,8 @@ class ProjectDetailViewModel extends ChangeNotifier {
     if (_project == null) return false;
 
     if (!canChangeStatus()) {
-      _errorMessage = 'You do not have permission to change status at this stage.';
+      _errorMessage =
+          'You do not have permission to change status at this stage.';
       notifyListeners();
       return false;
     }
@@ -330,7 +364,8 @@ class ProjectDetailViewModel extends ChangeNotifier {
     final allowedStatuses = getAllowedNextStatuses();
     final newStatusLower = newStatus.toLowerCase().trim();
     if (!allowedStatuses.any((s) => s.toLowerCase().trim() == newStatusLower)) {
-      _errorMessage = 'Invalid status transition. Please select an allowed status.';
+      _errorMessage =
+          'Invalid status transition. Please select an allowed status.';
       notifyListeners();
       return false;
     }
@@ -358,11 +393,11 @@ class ProjectDetailViewModel extends ChangeNotifier {
 
       // Check if online to sync to Supabase
       final connectivityResult = await _connectivity.checkConnectivity();
-      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+      final isOnline =
+          connectivityResult.contains(ConnectivityResult.mobile) ||
           connectivityResult.contains(ConnectivityResult.wifi) ||
           connectivityResult.contains(ConnectivityResult.ethernet);
 
-      bool syncedToSupabase = false;
       if (isOnline) {
         try {
           // Convert string to ProjectStatus enum
@@ -400,17 +435,15 @@ class ProjectDetailViewModel extends ChangeNotifier {
             );
             // Mark as synced after successful update
             await _dbHelper.markProjectAsSynced(_project!.id, _project!.id);
-            syncedToSupabase = true;
           }
         } catch (e) {
           // If Supabase update fails, the project is still saved locally with needsSync = true
           // It will sync later when connection is restored
           // Don't fail the operation since local update succeeded
-          syncedToSupabase = false;
         }
       }
       // If offline, project is saved locally and will sync when connection is restored
-      
+
       // Store info about sync status for UI feedback
       if (!isOnline) {
         // Project saved locally, will sync later

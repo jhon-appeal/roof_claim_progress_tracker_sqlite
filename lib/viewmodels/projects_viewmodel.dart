@@ -191,7 +191,7 @@ class ProjectsViewModel extends ChangeNotifier {
 
       // Assign project to the appropriate role field based on user role
       Project projectToCreate;
-      switch (profile.role?.toLowerCase()) {
+      switch (profile.role.toLowerCase()) {
         case 'homeowner':
           projectToCreate = project.copyWith(homeownerId: currentUser.id);
           break;
@@ -239,22 +239,6 @@ class ProjectsViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> updateProjectStatus(String projectId, String newStatus) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      // Convert string status to ProjectStatus enum
-      final project = _projects.firstWhere((p) => p.id == projectId);
-      // This will need to be handled by the repository
-      await loadProjects();
-    } catch (e) {
-      _errorMessage = 'Failed to update project: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
 
   void clearError() {
     _errorMessage = null;

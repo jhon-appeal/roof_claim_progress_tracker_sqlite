@@ -20,7 +20,7 @@ class SupabasePhotoRepository {
           .eq('project_id', projectId)
           .order('created_at', ascending: false);
 
-      return (response as List)
+      return (response as List<dynamic>)
           .map((json) => ProgressPhoto.fromMap(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
@@ -37,7 +37,7 @@ class SupabasePhotoRepository {
           .eq('milestone_id', milestoneId)
           .order('created_at', ascending: false);
 
-      return (response as List)
+      return (response as List<dynamic>)
           .map((json) => ProgressPhoto.fromMap(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
